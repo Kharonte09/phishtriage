@@ -80,6 +80,18 @@ chk('resultado visible', !d.querySelector('#result').hidden);
 chk('veredicto critico', /CRITICO/.test(d.querySelector('#verdictTitle').textContent));
 chk('score en el anillo', d.querySelector('#ringTxt').textContent === '100');
 chk('chips de autenticacion', /SPF/.test(d.querySelector('#authChips').textContent));
+chk('vista sencilla activa por defecto', d.querySelector('.panel[data-p="simple"]').classList.contains('active'));
+chk('titular en cristiano', /fraude/i.test(d.querySelector('#p-simple').textContent),
+  d.querySelector('#p-simple').textContent.slice(0, 60));
+chk('consejos accionables', d.querySelectorAll('#p-simple ol li').length >= 3);
+chk('razones traducidas', /contrasena|enlace|adjunto/i.test(d.querySelector('#p-simple').textContent));
+chk('enlaces de consulta sin clave a VT',
+  d.querySelector('#p-simple a[href^="https://www.virustotal.com/gui/file/"]') !== null);
+chk('enlace a AbuseIPDB',
+  d.querySelector('#p-simple a[href^="https://www.abuseipdb.com/check/"]') !== null);
+chk('los enlaces salen a pestana nueva y sin referrer',
+  Array.from(d.querySelectorAll('#p-simple a')).every(a =>
+    a.getAttribute('target') === '_blank' && /noreferrer/.test(a.getAttribute('rel') || '')));
 chk('resumen con el remitente', /micros0ft-security\.tk/.test(d.querySelector('#p-resumen').textContent));
 chk('arbol MIME', /multipart\/mixed/.test(d.querySelector('#p-resumen').textContent));
 chk('hallazgos pintados', d.querySelectorAll('#p-hallazgos .finding').length === 33,

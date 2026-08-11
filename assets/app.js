@@ -107,9 +107,12 @@
     $('#nUrls').textContent = r.urls.length;
     $('#nAtt').textContent = r.attachments.length;
 
-    renderResumen(r); renderHallazgos(r); renderCabeceras(r); renderAuth(r);
+    renderSimple(r); renderResumen(r); renderHallazgos(r); renderCabeceras(r); renderAuth(r);
     renderReceived(r); renderUrls(r); renderAdjuntos(r); renderCuerpo(r);
     renderIocs(r); renderEnrich(r); renderJson(r);
+    // Cada correo nuevo empieza en la vista sencilla
+    $$('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.p === 'simple'));
+    $$('.panel').forEach(p => p.classList.toggle('active', p.dataset.p === 'simple'));
     window.scrollTo({ top: $('#result').offsetTop - 20, behavior: 'smooth' });
   }
 
@@ -117,6 +120,134 @@
     return '<table>' + rows.map(([k, v, hl]) =>
       '<tr' + (hl ? ' class="hl"' : '') + '><td class="k">' + esc(k) + '</td><td class="v">' + (v || '<span class="muted">-</span>') + '</td></tr>'
     ).join('') + '</table>';
+  }
+
+  // --- Vista para gente que no es de esto -------------------------------------
+  // Traduce los ids de hallazgo a frases que entienda cualquiera.
+  const EN_CRISTIANO = {
+    'dmarc-fail': 'El correo no pasa la verificacion del dominio que dice ser.',
+    'spf-fail': 'El servidor que lo envio no esta autorizado por ese dominio.',
+    'dkim-fail': 'La firma del correo no es valida: alguien lo ha manipulado o falsificado.',
+    'align-none': 'Quien lo envio de verdad no tiene nada que ver con el remitente que se muestra.',
+    'rp-mismatch': 'La direccion real del remitente no coincide con la que aparece.',
+    'replyto-mismatch': 'Si respondes, tu respuesta iria a una direccion distinta de la que ves.',
+    'dn-brand': 'El nombre que se muestra imita a una marca conocida, pero la direccion real es otra.',
+    'dn-email': 'El nombre del remitente lleva escrita una direccion falsa para despistar.',
+    'from-punycode': 'El dominio del remitente usa letras raras que imitan a otro dominio.',
+    'from-tld': 'El remitente usa un tipo de dominio muy barato, tipico de fraudes.',
+    'subj-urgency': 'El asunto mete prisa o amenaza: es la tecnica mas vieja del manual.',
+    'subj-nothread': 'Simula ser la respuesta a una conversacion que nunca existio.',
+    'body-password': 'Trae un formulario que pide tu contrasena. Ningun banco ni empresa hace eso.',
+    'body-form': 'Trae un formulario incrustado para que escribas datos dentro del correo.',
+    'body-script': 'Trae codigo de programa escondido dentro del mensaje.',
+    'body-refresh': 'Intenta redirigirte solo a otra pagina al abrirlo.',
+    'body-hidden': 'Lleva texto invisible para colarse en el filtro antispam.',
+    'body-image': 'Es casi todo una imagen, para que los filtros no puedan leerlo.',
+    'body-bec': 'Pide cambiar datos bancarios o hacer un pago.',
+    'body-crypto': 'Habla de criptomonedas: tipico de estafas de inversion o de extorsion.',
+    'xmailer': 'Se ha enviado con una herramienta de correo masivo, no con un cliente normal.',
+    'url:url-mismatch': 'Un enlace ensena una direccion pero lleva a otra distinta.',
+    'url:url-ip': 'Un enlace apunta a una IP en vez de a una web con nombre.',
+    'url:url-punycode': 'Un enlace usa un dominio con letras que imitan a otro conocido.',
+    'url:url-brand': 'Un enlace mete el nombre de una marca dentro de un dominio que no es suyo.',
+    'url:url-shortener': 'Hay enlaces acortados que esconden a donde llevan de verdad.',
+    'url:url-creds': 'Hay enlaces que llevan a paginas de "inicio de sesion" o "verificar cuenta".',
+    'url:url-userinfo': 'Un enlace esta construido para aparentar un destino que no es el real.',
+    'att:att-exec': 'Trae un adjunto que es un programa: abrirlo instalaria algo en tu equipo.',
+    'att:att-macro': 'Trae un documento de Office con macros, que pueden ejecutar programas.',
+    'att:att-html': 'Trae una pagina web como adjunto: truco habitual para robar contrasenas.',
+    'att:att-double': 'Un adjunto tiene doble extension para parecer un PDF o una foto.',
+    'att:att-mismatch': 'Un adjunto dice ser una cosa y por dentro es otra.',
+    'att:att-rtlo': 'El nombre de un adjunto usa un truco para verse del reves.'
+  };
+
+  const CONSEJOS = {
+    CRITICO: ['No pulses ningun enlace ni abras los adjuntos.',
+      'No respondas ni llames a los telefonos que aparezcan en el correo.',
+      'Si ya pusiste tu contrasena en algun sitio, cambiala YA desde otra pestana entrando tu a la web oficial, y activa la verificacion en dos pasos.',
+      'Si dice ser tu banco, tu empresa o la administracion, llama al telefono que aparece en su web oficial o en el reverso de tu tarjeta, nunca al del correo.',
+      'Reenvialo a tu departamento de seguridad o denuncialo, y despues borralo.'],
+    ALTO: ['No pulses ningun enlace ni abras los adjuntos.',
+      'No respondas al correo.',
+      'Verifica por otro canal: entra tu a la web oficial escribiendo la direccion a mano, o llama al telefono de siempre.',
+      'Si te lo esperabas de verdad, pregunta al remitente por otra via antes de tocar nada.'],
+    MEDIO: ['Trata el correo con desconfianza: no pulses enlaces ni abras adjuntos por ahora.',
+      'Confirma por otro canal que el remitente te ha escrito de verdad.',
+      'Si te pide dinero, datos personales o una contrasena, da por hecho que es fraude hasta que lo confirmes.'],
+    BAJO: ['No he visto indicios claros de fraude, pero esto no es una garantia.',
+      'Si el correo te pide dinero, contrasenas o datos personales, verificalo igualmente por otro canal.',
+      'Ante la duda, no pulses el enlace: entra tu a la web escribiendo la direccion a mano.']
+  };
+
+  const TITULARES = {
+    CRITICO: ['Esto es un fraude casi con total seguridad', 'No toques nada de este correo.'],
+    ALTO: ['Muy sospechoso: trátalo como fraude', 'Tiene varias senales claras de phishing.'],
+    MEDIO: ['Sospechoso: no te fies todavia', 'Hay cosas que no cuadran en este correo.'],
+    BAJO: ['No he encontrado senales claras de fraude', 'Aun asi, revisa lo de siempre antes de fiarte.']
+  };
+
+  const vtSearch = q => 'https://www.virustotal.com/gui/search/' + encodeURIComponent(q);
+  const vtFile = h => 'https://www.virustotal.com/gui/file/' + encodeURIComponent(h);
+  const abuseIp = ip => 'https://www.abuseipdb.com/check/' + encodeURIComponent(ip);
+
+  function renderSimple(r) {
+    const [titulo, sub] = TITULARES[r.verdict];
+    const vistos = [];
+    for (const f of r.findings) {
+      const txt = EN_CRISTIANO[f.id];
+      if (txt && vistos.indexOf(txt) < 0) vistos.push(txt);
+    }
+    const razones = vistos.slice(0, 8);
+
+    const quien = r.summary.fromDisplay
+      ? '<b>' + esc(r.summary.fromDisplay) + '</b> pero la direccion real es <code>' + esc(r.summary.from || '?') + '</code>'
+      : '<code>' + esc(r.summary.from || '?') + '</code>';
+
+    // Comprobaciones de un clic: no hacen falta claves de API, abren la web publica.
+    const comprobar = [];
+    for (const a of r.attachments) {
+      if (a.sha256) comprobar.push(['Adjunto: ' + a.filename, vtFile(a.sha256), 'VirusTotal']);
+    }
+    for (const d of r.iocs.domains.slice(0, 8)) comprobar.push(['Dominio: ' + d, vtSearch(d), 'VirusTotal']);
+    for (const ip of r.iocs.ips.slice(0, 5)) comprobar.push(['Servidor: ' + ip, abuseIp(ip), 'AbuseIPDB']);
+
+    $('#p-simple').innerHTML =
+      '<div class="card">' +
+      '<h2 class="v-' + r.verdict + '" style="margin:0 0 4px;font-size:22px">' + esc(titulo) + '</h2>' +
+      '<p class="muted" style="margin:0 0 12px">' + esc(sub) + '</p>' +
+      '<table><tr><td class="k">Dice ser de</td><td class="v">' + quien + '</td></tr>' +
+      '<tr><td class="k">Asunto</td><td class="v">' + esc(r.summary.subject || '(sin asunto)') + '</td></tr>' +
+      '<tr><td class="k">Enlaces / adjuntos</td><td class="v">' + r.urls.length + ' enlaces, ' +
+      r.attachments.length + ' adjuntos</td></tr></table></div>' +
+
+      (razones.length ? '<div class="card"><h3>Por que lo digo</h3>' +
+        razones.map(t => '<div class="finding"><span class="sev sev-' +
+          (r.verdict === 'BAJO' ? 'info' : 'high') + '">&#9679;</span><span>' + esc(t) + '</span></div>').join('') +
+        '</div>' : '') +
+
+      '<div class="card"><h3>Que hacer ahora</h3><ol style="margin:0;padding-left:20px">' +
+      CONSEJOS[r.verdict].map(c => '<li style="margin-bottom:6px">' + esc(c) + '</li>').join('') +
+      '</ol></div>' +
+
+      (comprobar.length ? '<div class="card"><h3>Comprobar en servicios publicos <span class="muted">(sin registrarte)</span></h3>' +
+        '<p class="small">Cada boton abre una pestana nueva con la ficha publica de ese dato. Si sale en rojo, ' +
+        'es que ya lo han denunciado otros.</p>' +
+        '<div class="chips">' + comprobar.map(([label, url, svc]) =>
+          '<a class="btn" target="_blank" rel="noopener noreferrer" href="' + esc(url) + '">' +
+          esc(label.length > 46 ? label.slice(0, 46) + '...' : label) + ' &rarr; ' + svc + '</a>').join('') +
+        '</div>' +
+        '<p class="small" style="margin-top:10px">Ojo: al abrirlos le estas contando a esos servicios que has ' +
+        'recibido este correo. Para un correo normal da igual; si estas investigando un ataque dirigido, mejor no.</p>' +
+        '</div>' : '') +
+
+      '<div class="card"><h3>Denunciarlo (Espana)</h3><p class="small">' +
+      'INCIBE atiende dudas de ciberseguridad en el <b>017</b>, gratuito y confidencial. ' +
+      'Si ha habido perdida de dinero o de datos, se denuncia ante Policia Nacional o Guardia Civil. ' +
+      'Si es un correo de tu empresa, reenvialo a tu equipo de seguridad <b>como adjunto</b> ' +
+      '(asi conserva las cabeceras) antes de borrarlo.</p></div>' +
+
+      '<p class="small">Esto es un analisis automatico y orientativo: acierta con los fraudes de manual, ' +
+      'pero ni detecta todo ni acierta siempre. En las otras pestanas tienes el detalle tecnico completo.</p>';
   }
 
   function renderResumen(r) {

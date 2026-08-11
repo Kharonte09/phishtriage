@@ -38,6 +38,24 @@
     <button id="btnReset" disabled>Limpiar</button>
   </div>
 
+  <details class="card" style="margin-top:14px">
+    <summary style="cursor:pointer">&iquest;Y c&oacute;mo consigo el fichero <code>.eml</code> de un correo?</summary>
+    <table style="margin-top:10px">
+      <tr><td class="k">Gmail (web)</td><td class="v">Abre el correo &rarr; men&uacute; <b>&#8942;</b> arriba a la derecha del mensaje &rarr;
+        <b>Descargar mensaje</b>. Te baja un <code>.eml</code>.</td></tr>
+      <tr><td class="k">Outlook (escritorio)</td><td class="v">Arrastra el correo desde la lista hasta el escritorio, o
+        <b>Archivo &rarr; Guardar como</b> y elige formato <b>.eml</b>.</td></tr>
+      <tr><td class="k">Outlook (web)</td><td class="v">Abre el correo en ventana nueva &rarr; <b>&#8942;</b> &rarr;
+        <b>Guardar como</b>.</td></tr>
+      <tr><td class="k">Apple Mail</td><td class="v">Arrastra el correo a una carpeta del Finder.</td></tr>
+      <tr><td class="k">Thunderbird</td><td class="v">Clic derecho en el correo &rarr; <b>Guardar como &rarr; Archivo</b>.</td></tr>
+      <tr><td class="k">Sin descargar nada</td><td class="v">Abre el <b>mensaje original</b> / <b>ver c&oacute;digo fuente</b>,
+        selecciona todo el texto, c&oacute;pialo y p&eacute;galo aqu&iacute; con <b>Ctrl+V</b>.</td></tr>
+    </table>
+    <p class="small">Importante: el fichero se analiza dentro de tu navegador. No se sube a ning&uacute;n servidor,
+      ni al m&iacute;o ni a otro.</p>
+  </details>
+
   <div id="result" hidden>
     <div class="verdict">
       <svg class="score-ring" viewBox="0 0 42 42" aria-hidden="true">
@@ -55,7 +73,8 @@
     </div>
 
     <nav class="tabs" id="tabs">
-      <button data-p="resumen" class="active">Resumen</button>
+      <button data-p="simple" class="active">&iquest;Qu&eacute; hago?</button>
+      <button data-p="resumen">Resumen</button>
       <button data-p="hallazgos">Hallazgos <span class="n" id="nFind"></span></button>
       <button data-p="cabeceras">Cabeceras <span class="n" id="nHead"></span></button>
       <button data-p="auth">Autenticacion</button>
@@ -68,7 +87,8 @@
       <button data-p="json">JSON</button>
     </nav>
 
-    <section class="panel active" data-p="resumen" id="p-resumen"></section>
+    <section class="panel active" data-p="simple" id="p-simple"></section>
+    <section class="panel" data-p="resumen" id="p-resumen"></section>
     <section class="panel" data-p="hallazgos" id="p-hallazgos"></section>
     <section class="panel" data-p="cabeceras" id="p-cabeceras"></section>
     <section class="panel" data-p="auth" id="p-auth"></section>

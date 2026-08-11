@@ -203,3 +203,18 @@ hallazgos**. Si tocas una heurística, tócala en los dos sitios o el test te lo
 ## Licencia
 
 MIT.
+
+## Modo "para no técnicos"
+
+La primera pestaña del informe, **¿Qué hago?**, es la vista por defecto y no habla de
+SPF, DKIM ni cadenas Received. Traduce los hallazgos a frases normales ("un enlace enseña
+una dirección y lleva a otra"), da una lista de pasos concretos según el riesgo, y ofrece
+botones que abren la ficha pública de cada dominio, IP y hash en VirusTotal y AbuseIPDB
+**sin necesidad de clave ni de registrarse**.
+
+Ese es el camino para alguien que solo quiere saber si puede fiarse de un correo. El
+enriquecimiento por API (que sí necesita clave y proxy) es para el otro perfil: el que
+está haciendo triaje de una cola de incidentes.
+
+También hay, bajo el área de subida, una chuleta de cómo exportar el `.eml` desde Gmail,
+Outlook, Apple Mail o Thunderbird, y la alternativa de pegar el correo en bruto.
