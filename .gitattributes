@@ -1,2 +1,7 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Los .eml son evidencia: nunca normalizar CRLF/LF ni tocar un solo byte,
+# o los hashes y las firmas DKIM dejan de cuadrar.
+*.eml -text -diff
+*.msg -text -diff

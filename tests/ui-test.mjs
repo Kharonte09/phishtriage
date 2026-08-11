@@ -55,12 +55,26 @@ for (const f of ['assets/eml.js', 'assets/enrich.js', 'assets/app.js']) {
 let ok = 0, bad = 0;
 const chk = (n, c, x) => c ? (ok++, console.log('  ok   ' + n)) : (bad++, console.log('  FAIL ' + n + (x ? ' -> ' + x : '')));
 
+// El render es asincrono (hashes con WebCrypto): esperar a que aparezca,
+// no dormir un rato fijo. En un runner de CI lento eso daba falsos negativos.
+async function waitFor(cond, ms = 20000, label = '') {
+  const t0 = Date.now();
+  while (Date.now() - t0 < ms) {
+    try { if (cond()) return true; } catch (e) { /* aun no */ }
+    await new Promise(r => setTimeout(r, 50));
+  }
+  console.log('  (timeout esperando ' + label + ' tras ' + ms + ' ms)');
+  return false;
+}
+
 console.log('\n== interfaz ==');
 chk('motor cargado', typeof w.PhishTriage === 'object');
 chk('enriquecimiento cargado', typeof w.PhishEnrich === 'object');
+console.log('  info  crypto.subtle disponible: ' + !!(w.crypto && w.crypto.subtle));
 
 d.querySelector('#btnSample').dispatchEvent(new w.Event('click'));
-await new Promise(r => setTimeout(r, 900));
+await waitFor(() => !d.querySelector('#result').hidden, 20000, 'el panel de resultados');
+await waitFor(() => d.querySelectorAll('#p-adjuntos .att-item').length === 2, 20000, 'los adjuntos');
 
 chk('resultado visible', !d.querySelector('#result').hidden);
 chk('veredicto critico', /CRITICO/.test(d.querySelector('#verdictTitle').textContent));
@@ -74,7 +88,16 @@ chk('cabeceras en tabla', d.querySelectorAll('#p-cabeceras tr').length > 15);
 chk('3 saltos pintados', d.querySelectorAll('#p-received .hop').length === 3);
 chk('7 urls pintadas', d.querySelectorAll('#p-urls .url-item').length === 7);
 chk('2 adjuntos pintados', d.querySelectorAll('#p-adjuntos .att-item').length === 2);
-chk('sha256 visible', /[0-9a-f]{64}/.test(d.querySelector('#p-adjuntos').textContent));
+// Hashes concretos del adjunto Factura_88213.pdf.html del correo de ejemplo.
+// MD5 va en JS puro y debe estar siempre; SHA depende de WebCrypto.
+const attText = d.querySelector('#p-adjuntos').textContent;
+chk('md5 correcto', attText.includes('edc063210e77cde76bb7f9bb351fe1d5'));
+if (w.crypto && w.crypto.subtle) {
+  chk('sha256 correcto',
+    attText.includes('7675017ab33adfcde523e434366c71c2827064a5975759fa31fdfd19d47a19e7'));
+} else {
+  console.log('  skip sha256 (sin WebCrypto en este entorno)');
+}
 chk('el HTML del correo NO se renderiza',
   d.querySelectorAll('#p-cuerpo form, #p-cuerpo input, #p-cuerpo img, #p-cuerpo script').length === 0);
 chk('el HTML se muestra como codigo', /&lt;form/.test(d.querySelectorAll('#p-cuerpo pre')[1].innerHTML));
