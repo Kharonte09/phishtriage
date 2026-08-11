@@ -283,10 +283,19 @@
     const s = EN.loadSettings();
     const configured = !!(s.proxyBase || s.vtKey || s.abuseKey);
     if (!r.enrichment) {
+      const directoDesdeWeb = configured && !s.proxyBase;
       $('#p-enriquecimiento').innerHTML = '<div class="card">' +
         (configured
           ? '<div class="ok-box">Configurado (' + (s.proxyBase ? 'via proxy ' + esc(s.proxyBase) : 'claves en este navegador') +
-            '). Pulsa <b>Enriquecer</b> para consultar VirusTotal y AbuseIPDB.</div>'
+            '). Pulsa <b>Enriquecer</b> para consultar VirusTotal y AbuseIPDB.</div>' +
+            (directoDesdeWeb ? '<div class="warn-box" style="margin-top:10px">Aviso: VirusTotal y AbuseIPDB ' +
+              '<b>no envian cabeceras CORS</b>, asi que el navegador bloqueara estas peticiones aunque la clave ' +
+              'sea correcta. Es una limitacion de sus APIs, no un fallo tuyo. Levanta <code>cli/proxy.py</code> ' +
+              'y pon su URL en Ajustes, o usa el CLI con <code>--enrich</code>.</div>' : '') +
+            (location.protocol === 'https:' && /^http:\/\//i.test(s.proxyBase || '')
+              ? '<div class="warn-box" style="margin-top:10px">Esta pagina va por HTTPS y el proxy por HTTP: ' +
+                'el navegador cortara la peticion por contenido mixto. Sirve la app en local ' +
+                '(<code>python -m http.server 8000</code>) y entra por <code>http://127.0.0.1:8000</code>.</div>' : '')
           : '<div class="warn-box">Sin configurar. Abre <b>Ajustes</b> y pon un proxy local o tus claves de API. ' +
             'Sin esto, PhishTriage sigue funcionando entero salvo la reputacion externa.</div>') +
         '<p class="small">Aviso: consultar una URL en VirusTotal la hace visible para terceros. En un incidente real puede alertar al atacante.</p></div>';

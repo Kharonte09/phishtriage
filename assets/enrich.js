@@ -40,6 +40,27 @@
 
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+  /**
+   * Un fetch fallido desde el navegador casi nunca es culpa de la clave.
+   * Explica cual de los tres motivos reales es, que si no se pierde uno una hora.
+   */
+  function explainBlocked(url) {
+    const pageIsHttps = location.protocol === 'https:';
+    const targetIsLocal = /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])/i.test(url);
+    if (pageIsHttps && /^http:\/\//i.test(url)) {
+      return 'Contenido mixto: esta pagina va por HTTPS y el proxy por HTTP, y el navegador ' +
+        'lo corta' + (targetIsLocal ? ' (Firefox lo bloquea incluso en 127.0.0.1)' : '') +
+        '. Sirve la app en local con "python -m http.server 8000" y entra por http://127.0.0.1:8000.';
+    }
+    if (targetIsLocal) {
+      return 'No hay respuesta del proxy en ' + url.replace(/(:\d+).*/, '$1') +
+        '. Arrancalo con: python cli/proxy.py';
+    }
+    return 'VirusTotal y AbuseIPDB no envian cabeceras CORS, asi que el navegador bloquea la ' +
+      'peticion antes de que salga: no es tu clave. Usa el proxy local (cli/proxy.py) o el CLI ' +
+      'con --enrich.';
+  }
+
   function b64url(s) {
     const b = btoa(unescape(encodeURIComponent(s)));
     return b.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -50,7 +71,7 @@
     try {
       res = await fetch(url, { headers: headers || {}, mode: 'cors' });
     } catch (e) {
-      const err = new Error('Peticion bloqueada (CORS o red). Usa el proxy local o el CLI.');
+      const err = new Error(explainBlocked(url));
       err.kind = 'cors';
       throw err;
     }

@@ -92,9 +92,11 @@ límite de 4 peticiones/minuto de la API pública de VirusTotal; con clave de pa
 
 ### Web
 
-El navegador no puede llamar a AbuseIPDB directamente (no manda cabeceras CORS) y
-VirusTotal tampoco es de fiar en ese sentido. Además, meter una clave en una página
-pública es regalarla. Solución: un proxy en tu propia máquina.
+**Desde el navegador, contra la API pública, no funciona y no puede funcionar.** Ni
+VirusTotal ni AbuseIPDB envían cabeceras CORS, así que el navegador aborta la petición
+antes de que salga del equipo. Si ves `Peticion bloqueada (CORS o red)`, tu clave está
+bien; el problema es de sus APIs. Además, meter una clave en una página pública es
+regalarla. Solución: un proxy en tu propia máquina.
 
 ```bash
 export VT_API_KEY=... ABUSEIPDB_API_KEY=...
@@ -102,8 +104,24 @@ python3 cli/proxy.py                     # http://127.0.0.1:8787
 ```
 
 Y en la web, **Ajustes → Proxy** → `http://127.0.0.1:8787`. Las claves se quedan en el
-entorno del proxy; el navegador nunca las ve. El proxy escucha solo en loopback y acepta
-peticiones de `localhost`; para usarlo desde tu GitHub Pages, arráncalo con
+entorno del proxy; el navegador nunca las ve.
+
+Importante: **sirve la app en local para esto**, no la abras desde GitHub Pages. Una página
+HTTPS no puede hablar con un `http://127.0.0.1` (contenido mixto; Firefox lo bloquea sin
+excepciones). El flujo completo, en dos terminales:
+
+```bash
+# terminal 1 - el proxy con tu clave
+cp cli/.env.example cli/.env     # y escribe dentro VT_API_KEY / ABUSEIPDB_API_KEY
+python3 cli/proxy.py
+
+# terminal 2 - la web
+python3 -m http.server 8000
+# abre http://127.0.0.1:8000 -> Ajustes -> Proxy: http://127.0.0.1:8787
+```
+
+Si quieres enriquecer desde la web pública tendrías que poner el proxy detrás de HTTPS
+(por ejemplo un Cloudflare Worker con la clave como secreto) y arrancarlo con
 `--allow-origin https://kharonte09.github.io`.
 
 Para trastear en local sin tocar el panel cada vez:
