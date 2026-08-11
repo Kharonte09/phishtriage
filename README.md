@@ -15,7 +15,6 @@ Dos frontales sobre la misma lógica:
 **Demo: https://kharonte09.github.io/phishtriage/**
 
 ![tests](https://github.com/Kharonte09/phishtriage/actions/workflows/ci.yml/badge.svg)
-![pages](https://github.com/Kharonte09/phishtriage/actions/workflows/pages.yml/badge.svg)
 
 ---
 
@@ -126,12 +125,15 @@ hace visible a terceros y puede avisar al atacante de que le has detectado.
 
 ## Despliegue
 
-El workflow `.github/workflows/pages.yml` publica la web en cada push a `main` y activa
-Pages solo la primera vez (`actions/configure-pages` con `enablement: true`), así que no
-hay que tocar nada en *Settings*. No hay build ni dependencias: Pages sirve el HTML tal
-cual, y `.nojekyll` evita que Jekyll se meta por medio.
+Pages está configurado como **Deploy from a branch** (`main`, carpeta `/ (root)`): cada push
+a `main` se publica solo. No hay build ni dependencias, GitHub sirve el HTML tal cual y
+`.nojekyll` evita que Jekyll se meta por medio.
 
-Para desplegar a mano: pestaña **Actions → pages → Run workflow**.
+Es a propósito que **no** haya un workflow de despliegue. La alternativa
+(`actions/deploy-pages`) obliga a dar *Read and write permissions* al `GITHUB_TOKEN` de
+Actions, y no compensa ampliar el radio de acción de un workflow para servir HTML estático.
+Así el único workflow del repo es `tests`, declarado con `permissions: contents: read`:
+no puede escribir nada aunque una dependencia comprometida lo intentara.
 
 Requisito: el repositorio debe ser público (Pages en repos privados es de plan de pago).
 
