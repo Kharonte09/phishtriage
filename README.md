@@ -12,7 +12,10 @@ Dos frontales sobre la misma lógica:
 - **CLI** (`cli/phishtriage.py`): Python sin dependencias, salida de terminal, JSON o
   Markdown, y código de salida según el riesgo para encadenarlo en scripts.
 
-Demo: `https://<TU-USUARIO>.github.io/phishtriage/`
+**Demo: https://kharonte09.github.io/phishtriage/**
+
+![tests](https://github.com/Kharonte09/phishtriage/actions/workflows/ci.yml/badge.svg)
+![pages](https://github.com/Kharonte09/phishtriage/actions/workflows/pages.yml/badge.svg)
 
 ---
 
@@ -41,7 +44,7 @@ bloquear un dominio sin mirarlo.
 Abrirla en local:
 
 ```bash
-git clone https://github.com/<TU-USUARIO>/phishtriage.git
+git clone https://github.com/Kharonte09/phishtriage.git
 cd phishtriage
 python3 -m http.server 8000
 # http://127.0.0.1:8000
@@ -102,7 +105,7 @@ python3 cli/proxy.py                     # http://127.0.0.1:8787
 Y en la web, **Ajustes → Proxy** → `http://127.0.0.1:8787`. Las claves se quedan en el
 entorno del proxy; el navegador nunca las ve. El proxy escucha solo en loopback y acepta
 peticiones de `localhost`; para usarlo desde tu GitHub Pages, arráncalo con
-`--allow-origin https://<TU-USUARIO>.github.io`.
+`--allow-origin https://kharonte09.github.io`.
 
 Para trastear en local sin tocar el panel cada vez:
 
@@ -121,22 +124,16 @@ hace visible a terceros y puede avisar al atacante de que le has detectado.
 
 ---
 
-## Publicar en GitHub Pages
+## Despliegue
 
-```bash
-cd phishtriage
-git init -b main
-git add .
-git commit -m "PhishTriage: analizador de .eml client-side + CLI"
-git remote add origin https://github.com/<TU-USUARIO>/phishtriage.git
-git push -u origin main
-```
+El workflow `.github/workflows/pages.yml` publica la web en cada push a `main` y activa
+Pages solo la primera vez (`actions/configure-pages` con `enablement: true`), así que no
+hay que tocar nada en *Settings*. No hay build ni dependencias: Pages sirve el HTML tal
+cual, y `.nojekyll` evita que Jekyll se meta por medio.
 
-En **Settings → Pages**: *Source* = `Deploy from a branch`, rama `main`, carpeta `/ (root)`.
-En un par de minutos está en `https://<TU-USUARIO>.github.io/phishtriage/`.
+Para desplegar a mano: pestaña **Actions → pages → Run workflow**.
 
-El fichero `.nojekyll` evita que Jekyll se coma nada. No hay build ni dependencias:
-Pages sirve el HTML tal cual.
+Requisito: el repositorio debe ser público (Pages en repos privados es de plan de pago).
 
 ---
 
