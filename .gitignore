@@ -1,0 +1,25 @@
+# Configuracion local con claves de API: NUNCA se sube
+assets/config.local.js
+cli/.env
+.env
+
+# Correos reales y salidas de analisis
+*.eml
+!samples/sample-phishing.eml
+*.msg
+out/
+informes/
+*.json
+!package.json
+*.md.bak
+
+# Basura del sistema
+.DS_Store
+Thumbs.db
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+node_modules/
+.idea/
+.vscode/

