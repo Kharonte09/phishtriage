@@ -1,9 +1,8 @@
-/* PhishTriage - interfaz. Todo el trabajo real esta en eml.js y enrich.js. */
+/* PhishTriage - interfaz. Todo el trabajo real está en eml.js. */
 (function () {
   'use strict';
 
   const PT = window.PhishTriage;
-  const EN = window.PhishEnrich;
   const $ = s => document.querySelector(s);
   const $$ = s => Array.from(document.querySelectorAll(s));
 
@@ -78,7 +77,7 @@
   function show(r) {
     current = r;
     $('#result').hidden = false;
-    ['#btnJson', '#btnMd', '#btnIocs', '#btnReset', '#btnEnrich'].forEach(s => $(s).disabled = false);
+    ['#btnJson', '#btnMd', '#btnIocs', '#btnReset'].forEach(s => $(s).disabled = false);
 
     // veredicto
     const ring = $('#ring'), svg = $('.score-ring');
@@ -109,7 +108,7 @@
 
     renderSimple(r); renderResumen(r); renderHallazgos(r); renderCabeceras(r); renderAuth(r);
     renderReceived(r); renderUrls(r); renderAdjuntos(r); renderCuerpo(r);
-    renderIocs(r); renderEnrich(r); renderJson(r);
+    renderIocs(r); renderJson(r);
     // Cada correo nuevo empieza en la vista sencilla
     $$('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.p === 'simple'));
     $$('.panel').forEach(p => p.classList.toggle('active', p.dataset.p === 'simple'));
@@ -125,65 +124,65 @@
   // --- Vista para gente que no es de esto -------------------------------------
   // Traduce los ids de hallazgo a frases que entienda cualquiera.
   const EN_CRISTIANO = {
-    'dmarc-fail': 'El correo no pasa la verificacion del dominio que dice ser.',
-    'spf-fail': 'El servidor que lo envio no esta autorizado por ese dominio.',
-    'dkim-fail': 'La firma del correo no es valida: alguien lo ha manipulado o falsificado.',
-    'align-none': 'Quien lo envio de verdad no tiene nada que ver con el remitente que se muestra.',
-    'rp-mismatch': 'La direccion real del remitente no coincide con la que aparece.',
-    'replyto-mismatch': 'Si respondes, tu respuesta iria a una direccion distinta de la que ves.',
-    'dn-brand': 'El nombre que se muestra imita a una marca conocida, pero la direccion real es otra.',
-    'dn-email': 'El nombre del remitente lleva escrita una direccion falsa para despistar.',
+    'dmarc-fail': 'El correo no pasa la verificación del dominio que dice ser.',
+    'spf-fail': 'El servidor que lo envió no está autorizado por ese dominio.',
+    'dkim-fail': 'La firma del correo no es válida: alguien lo ha manipulado o falsificado.',
+    'align-none': 'Quien lo envió de verdad no tiene nada que ver con el remitente que se muestra.',
+    'rp-mismatch': 'La dirección real del remitente no coincide con la que aparece.',
+    'replyto-mismatch': 'Si respondes, tu respuesta iría a una dirección distinta de la que ves.',
+    'dn-brand': 'El nombre que se muestra imita a una marca conocida, pero la dirección real es otra.',
+    'dn-email': 'El nombre del remitente lleva escrita una dirección falsa para despistar.',
     'from-punycode': 'El dominio del remitente usa letras raras que imitan a otro dominio.',
     'from-tld': 'El remitente usa un tipo de dominio muy barato, tipico de fraudes.',
-    'subj-urgency': 'El asunto mete prisa o amenaza: es la tecnica mas vieja del manual.',
-    'subj-nothread': 'Simula ser la respuesta a una conversacion que nunca existio.',
-    'body-password': 'Trae un formulario que pide tu contrasena. Ningun banco ni empresa hace eso.',
+    'subj-urgency': 'El asunto mete prisa o amenaza: es la técnica más vieja del manual.',
+    'subj-nothread': 'Simula ser la respuesta a una conversacion que nunca existió.',
+    'body-password': 'Trae un formulario que pide tu contraseña. Ningún banco ni empresa hace eso.',
     'body-form': 'Trae un formulario incrustado para que escribas datos dentro del correo.',
-    'body-script': 'Trae codigo de programa escondido dentro del mensaje.',
-    'body-refresh': 'Intenta redirigirte solo a otra pagina al abrirlo.',
+    'body-script': 'Trae código de programa escondido dentro del mensaje.',
+    'body-refresh': 'Intenta redirigirte solo a otra página al abrirlo.',
     'body-hidden': 'Lleva texto invisible para colarse en el filtro antispam.',
     'body-image': 'Es casi todo una imagen, para que los filtros no puedan leerlo.',
     'body-bec': 'Pide cambiar datos bancarios o hacer un pago.',
-    'body-crypto': 'Habla de criptomonedas: tipico de estafas de inversion o de extorsion.',
+    'body-crypto': 'Habla de criptomonedas: tipico de estafas de inversión o de extorsión.',
     'xmailer': 'Se ha enviado con una herramienta de correo masivo, no con un cliente normal.',
-    'url:url-mismatch': 'Un enlace ensena una direccion pero lleva a otra distinta.',
+    'url:url-mismatch': 'Un enlace enseña una dirección pero lleva a otra distinta.',
     'url:url-ip': 'Un enlace apunta a una IP en vez de a una web con nombre.',
     'url:url-punycode': 'Un enlace usa un dominio con letras que imitan a otro conocido.',
     'url:url-brand': 'Un enlace mete el nombre de una marca dentro de un dominio que no es suyo.',
     'url:url-shortener': 'Hay enlaces acortados que esconden a donde llevan de verdad.',
-    'url:url-creds': 'Hay enlaces que llevan a paginas de "inicio de sesion" o "verificar cuenta".',
+    'url:url-creds': 'Hay enlaces que llevan a páginas de "inicio de sesion" o "verificar cuenta".',
     'url:url-userinfo': 'Un enlace esta construido para aparentar un destino que no es el real.',
     'att:att-exec': 'Trae un adjunto que es un programa: abrirlo instalaria algo en tu equipo.',
     'att:att-macro': 'Trae un documento de Office con macros, que pueden ejecutar programas.',
-    'att:att-html': 'Trae una pagina web como adjunto: truco habitual para robar contrasenas.',
-    'att:att-double': 'Un adjunto tiene doble extension para parecer un PDF o una foto.',
+    'att:att-html': 'Trae una página web como adjunto: truco habitual para robar contraseñas.',
+    'att:att-double': 'Un adjunto tiene doble extensión para parecer un PDF o una foto.',
     'att:att-mismatch': 'Un adjunto dice ser una cosa y por dentro es otra.',
     'att:att-rtlo': 'El nombre de un adjunto usa un truco para verse del reves.'
   };
 
   const CONSEJOS = {
-    CRITICO: ['No pulses ningun enlace ni abras los adjuntos.',
-      'No respondas ni llames a los telefonos que aparezcan en el correo.',
-      'Si ya pusiste tu contrasena en algun sitio, cambiala YA desde otra pestana entrando tu a la web oficial, y activa la verificacion en dos pasos.',
-      'Si dice ser tu banco, tu empresa o la administracion, llama al telefono que aparece en su web oficial o en el reverso de tu tarjeta, nunca al del correo.',
-      'Reenvialo a tu departamento de seguridad o denuncialo, y despues borralo.'],
-    ALTO: ['No pulses ningun enlace ni abras los adjuntos.',
+    CRITICO: ['No pulses ningún enlace ni abras los adjuntos.',
+      'No respondas ni llames a los teléfonos que aparezcan en el correo.',
+      'Si ya pusiste tu contraseña en algún sitio, cambiala YA desde otra pestaña entrando tu a la web oficial, y activa la verificación en dos pasos.',
+      'Si dice ser tu banco, tu empresa o la administracion, llama al teléfono que aparece en su web oficial o en el reverso de tu tarjeta, nunca al del correo.',
+      'Reenvialo a tu departamento de seguridad o denuncialo, y después borralo.'],
+    ALTO: ['No pulses ningún enlace ni abras los adjuntos.',
       'No respondas al correo.',
-      'Verifica por otro canal: entra tu a la web oficial escribiendo la direccion a mano, o llama al telefono de siempre.',
+      'Verifica por otro canal: entra tu a la web oficial escribiendo la dirección a mano, o llama al teléfono de siempre.',
       'Si te lo esperabas de verdad, pregunta al remitente por otra via antes de tocar nada.'],
     MEDIO: ['Trata el correo con desconfianza: no pulses enlaces ni abras adjuntos por ahora.',
       'Confirma por otro canal que el remitente te ha escrito de verdad.',
-      'Si te pide dinero, datos personales o una contrasena, da por hecho que es fraude hasta que lo confirmes.'],
+      'Si te pide dinero, datos personales o una contraseña, da por hecho que es fraude hasta que lo confirmes.'],
     BAJO: ['No he visto indicios claros de fraude, pero esto no es una garantia.',
-      'Si el correo te pide dinero, contrasenas o datos personales, verificalo igualmente por otro canal.',
-      'Ante la duda, no pulses el enlace: entra tu a la web escribiendo la direccion a mano.']
+      'Si el correo te pide dinero, contraseñas o datos personales, verificalo igualmente por otro canal.',
+      'Ante la duda, no pulses el enlace: entra tu a la web escribiendo la dirección a mano.']
   };
 
   const TITULARES = {
     CRITICO: ['Esto es un fraude casi con total seguridad', 'No toques nada de este correo.'],
-    ALTO: ['Muy sospechoso: trátalo como fraude', 'Tiene varias senales claras de phishing.'],
+    ALTO: ['Muy sospechoso: trátalo como fraude', 'Tiene varias señales claras de phishing.'],
     MEDIO: ['Sospechoso: no te fies todavia', 'Hay cosas que no cuadran en este correo.'],
-    BAJO: ['No he encontrado senales claras de fraude', 'Aun asi, revisa lo de siempre antes de fiarte.']
+    BAJO: ['No he encontrado señales claras de fraude', 'Aun así, revisa lo de siempre antes de fiarte.']
   };
 
   const vtSearch = q => 'https://www.virustotal.com/gui/search/' + encodeURIComponent(q);
@@ -200,10 +199,10 @@
     const razones = vistos.slice(0, 8);
 
     const quien = r.summary.fromDisplay
-      ? '<b>' + esc(r.summary.fromDisplay) + '</b> pero la direccion real es <code>' + esc(r.summary.from || '?') + '</code>'
+      ? '<b>' + esc(r.summary.fromDisplay) + '</b> pero la dirección real es <code>' + esc(r.summary.from || '?') + '</code>'
       : '<code>' + esc(r.summary.from || '?') + '</code>';
 
-    // Comprobaciones de un clic: no hacen falta claves de API, abren la web publica.
+    // Comprobaciones de un clic: no hacen falta claves de API, abren la web pública.
     const comprobar = [];
     for (const a of r.attachments) {
       if (a.sha256) comprobar.push(['Adjunto: ' + a.filename, vtFile(a.sha256), 'VirusTotal']);
@@ -229,8 +228,8 @@
       CONSEJOS[r.verdict].map(c => '<li style="margin-bottom:6px">' + esc(c) + '</li>').join('') +
       '</ol></div>' +
 
-      (comprobar.length ? '<div class="card"><h3>Comprobar en servicios publicos <span class="muted">(sin registrarte)</span></h3>' +
-        '<p class="small">Cada boton abre una pestana nueva con la ficha publica de ese dato. Si sale en rojo, ' +
+      (comprobar.length ? '<div class="card"><h3>Comprobar en servicios públicos <span class="muted">(sin registrarte)</span></h3>' +
+        '<p class="small">Cada boton abre una pestaña nueva con la ficha pública de ese dato. Si sale en rojo, ' +
         'es que ya lo han denunciado otros.</p>' +
         '<div class="chips">' + comprobar.map(([label, url, svc]) =>
           '<a class="btn" target="_blank" rel="noopener noreferrer" href="' + esc(url) + '">' +
@@ -240,14 +239,14 @@
         'recibido este correo. Para un correo normal da igual; si estas investigando un ataque dirigido, mejor no.</p>' +
         '</div>' : '') +
 
-      '<div class="card"><h3>Denunciarlo (Espana)</h3><p class="small">' +
+      '<div class="card"><h3>Denunciarlo (España)</h3><p class="small">' +
       'INCIBE atiende dudas de ciberseguridad en el <b>017</b>, gratuito y confidencial. ' +
       'Si ha habido perdida de dinero o de datos, se denuncia ante Policia Nacional o Guardia Civil. ' +
       'Si es un correo de tu empresa, reenvialo a tu equipo de seguridad <b>como adjunto</b> ' +
-      '(asi conserva las cabeceras) antes de borrarlo.</p></div>' +
+      '(así conserva las cabeceras) antes de borrarlo.</p></div>' +
 
-      '<p class="small">Esto es un analisis automatico y orientativo: acierta con los fraudes de manual, ' +
-      'pero ni detecta todo ni acierta siempre. En las otras pestanas tienes el detalle tecnico completo.</p>';
+      '<p class="small">Esto es un análisis automatico y orientativo: acierta con los fraudes de manual, ' +
+      'pero ni detecta todo ni acierta siempre. En las otras pestañas tienes el detalle técnico completo.</p>';
   }
 
   function renderResumen(r) {
@@ -284,7 +283,22 @@
   function renderHallazgos(r) {
     const order = { high: 0, medium: 1, low: 2, info: 3 };
     const list = r.findings.slice().sort((a, b) => order[a.sev] - order[b.sev]);
-    $('#p-hallazgos').innerHTML = '<div class="card">' + (list.length ? list.map(f =>
+    // Cómo se reparte la nota: cada categoría suma hasta su techo y nada más
+    const desglose = '<div class="card"><h3>Cómo se reparte la nota ' +
+      '<span class="muted">(cada categoría tiene un techo; los techos suman 100)</span></h3>' +
+      '<table><thead><tr><th>Categoría</th><th>Cuenta</th><th>Reparto</th>' +
+      '<th>Bruto</th><th>Reglas</th></tr></thead><tbody>' +
+      r.scoreBreakdown.map(d =>
+        '<tr><td>' + esc(d.nombre) + '</td>' +
+        '<td class="v nowrap">' + d.puntos + '/' + d.techo + '</td>' +
+        '<td style="width:40%"><div style="background:var(--bg3);border-radius:3px;height:10px">' +
+        '<div style="width:' + (100 * d.puntos / d.techo) + '%;height:10px;border-radius:3px;background:' +
+        (d.puntos === d.techo ? 'var(--high)' : d.puntos ? 'var(--med)' : 'transparent') + '"></div></div></td>' +
+        '<td class="v">' + d.bruto + '</td><td class="v">' + d.reglas + '</td></tr>').join('') +
+      '<tr><td><b>Total</b></td><td class="v"><b>' + r.score + '/100</b></td>' +
+      '<td colspan="3" class="muted">' + esc(r.verdict) + '</td></tr>' +
+      '</tbody></table></div>';
+    $('#p-hallazgos').innerHTML = desglose + '<div class="card">' + (list.length ? list.map(f =>
       '<div class="finding"><span class="sev sev-' + f.sev + '">' + SEVLABEL[f.sev] + '</span>' +
       '<span>' + esc(f.msg) + '</span>' + (f.points ? '<span class="pts">+' + f.points + '</span>' : '') + '</div>'
     ).join('') : '<span class="muted">Sin hallazgos.</span>') + '</div>';
@@ -303,7 +317,7 @@
     const a = r.auth;
     const al = v => v === true ? '<span class="pill good">alineado</span>' : v === false ? '<span class="pill bad">NO alineado</span>' : '<span class="pill">n/d</span>';
     $('#p-auth').innerHTML =
-      '<div class="card"><h3>Resultado de autenticacion</h3>' + kv([
+      '<div class="card"><h3>Resultado de autenticación</h3>' + kv([
         ['SPF', esc(a.spf || 'n/d') + ' <span class="muted">smtp.mailfrom=' + esc(a.spfDomain || 'n/d') + '</span> ' + al(a.alignment.spf), true],
         ['DKIM', esc(a.dkim || 'n/d') + ' <span class="muted">header.d=' + esc(a.dkimDomain || 'n/d') + '</span> ' + al(a.alignment.dkim), true],
         ['DMARC', esc(a.dmarc || 'n/d') + ' <span class="muted">header.from=' + esc(a.dmarcFrom || 'n/d') + '</span>', true],
@@ -364,13 +378,13 @@
         ' &middot; <a target="_blank" rel="noopener noreferrer" href="https://www.virustotal.com/gui/file/' + esc(a.sha256) + '">VT</a></div>' : '') +
       a.flags.map(f => '<div class="finding"><span class="sev sev-' + f.sev + '">' + SEVLABEL[f.sev] + '</span><span>' + esc(f.msg) + '</span></div>').join('') +
       '</div>').join('') +
-      '<p class="small">Los hashes se calculan en local (SHA-1/256 con WebCrypto, MD5 en JS). El contenido del adjunto nunca se envia a ningun sitio salvo que pulses "Enriquecer".</p>';
+      '<p class="small">Los hashes se calculan en local (SHA-1/256 con WebCrypto, MD5 en JS). El contenido del adjunto nunca se envia a ningún sitio salvo que pulses "Enriquecer".</p>';
   }
 
   function renderCuerpo(r) {
     $('#p-cuerpo').innerHTML =
       '<div class="card"><h3>Texto plano</h3><pre class="block">' + esc(r.bodies.plain || '(vacio)') + '</pre></div>' +
-      '<div class="card"><h3>HTML <span class="muted">(' + r.bodies.htmlLength + ' bytes, mostrado como codigo, nunca renderizado)</span></h3>' +
+      '<div class="card"><h3>HTML <span class="muted">(' + r.bodies.htmlLength + ' bytes, mostrado como código, nunca renderizado)</span></h3>' +
       '<pre class="block">' + esc(r.bodies.htmlSource || '(vacio)') + '</pre></div>';
   }
 
@@ -408,64 +422,6 @@
     $('#p-json').innerHTML = '<div class="toolbar" style="margin:0 0 12px"><button id="copyJson">Copiar JSON</button></div>' +
       '<pre class="block">' + esc(JSON.stringify(r, null, 2)) + '</pre>';
     $('#copyJson').onclick = e => copy(JSON.stringify(r, null, 2), e.target);
-  }
-
-  function renderEnrich(r) {
-    const s = EN.loadSettings();
-    const configured = !!(s.proxyBase || s.vtKey || s.abuseKey);
-    if (!r.enrichment) {
-      const directoDesdeWeb = configured && !s.proxyBase;
-      $('#p-enriquecimiento').innerHTML = '<div class="card">' +
-        (configured
-          ? '<div class="ok-box">Configurado (' + (s.proxyBase ? 'via proxy ' + esc(s.proxyBase) : 'claves en este navegador') +
-            '). Pulsa <b>Enriquecer</b> para consultar VirusTotal y AbuseIPDB.</div>' +
-            (directoDesdeWeb ? '<div class="warn-box" style="margin-top:10px">Aviso: VirusTotal y AbuseIPDB ' +
-              '<b>no envian cabeceras CORS</b>, asi que el navegador bloqueara estas peticiones aunque la clave ' +
-              'sea correcta. Es una limitacion de sus APIs, no un fallo tuyo. Levanta <code>cli/proxy.py</code> ' +
-              'y pon su URL en Ajustes, o usa el CLI con <code>--enrich</code>.</div>' : '') +
-            (location.protocol === 'https:' && /^http:\/\//i.test(s.proxyBase || '')
-              ? '<div class="warn-box" style="margin-top:10px">Esta pagina va por HTTPS y el proxy por HTTP: ' +
-                'el navegador cortara la peticion por contenido mixto. Sirve la app en local ' +
-                '(<code>python -m http.server 8000</code>) y entra por <code>http://127.0.0.1:8000</code>.</div>' : '')
-          : '<div class="warn-box">Sin configurar. Abre <b>Ajustes</b> y pon un proxy local o tus claves de API. ' +
-            'Sin esto, PhishTriage sigue funcionando entero salvo la reputacion externa.</div>') +
-        '<p class="small">Aviso: consultar una URL en VirusTotal la hace visible para terceros. En un incidente real puede alertar al atacante.</p></div>';
-      return;
-    }
-    const e = r.enrichment;
-    const vtRow = (k, d) => {
-      const v = d.virustotal;
-      if (!v) return '';
-      const bad = (v.malicious || 0) + (v.suspicious || 0);
-      return '<tr><td class="v">' + esc(k) + '</td>' +
-        '<td class="v"><span class="pill ' + (bad ? 'bad' : 'good') + '">' + (v.malicious || 0) + '/' + ((v.malicious || 0) + (v.harmless || 0) + (v.undetected || 0) + (v.suspicious || 0)) + '</span></td>' +
-        '<td class="v">' + (v.suspicious || 0) + '</td>' +
-        '<td class="v">' + esc([v.asOwner, v.country, v.registrar, v.creationDate, (v.tags || []).slice(0, 3).join(' ')].filter(Boolean).join(' &middot; ')) + '</td>' +
-        '<td><a target="_blank" rel="noopener noreferrer" href="' + esc(v.permalink) + '">ver</a></td></tr>';
-    };
-    const table = (title, obj) => {
-      const keys = Object.keys(obj);
-      if (!keys.length) return '';
-      return '<div class="card"><h3>' + title + '</h3><table><thead><tr><th>IOC</th><th>VT malicioso</th><th>Sosp.</th><th>Contexto</th><th></th></tr></thead><tbody>' +
-        keys.map(k => vtRow(k, obj[k])).join('') + '</tbody></table></div>';
-    };
-    const ipRows = Object.keys(e.ips).map(ip => {
-      const a = e.ips[ip].abuseipdb, v = e.ips[ip].virustotal;
-      return '<tr><td class="v">' + esc(PT.defang(ip)) + '</td>' +
-        '<td class="v">' + (v ? '<span class="pill ' + (v.malicious ? 'bad' : 'good') + '">' + v.malicious + '</span>' : '-') + '</td>' +
-        '<td class="v">' + (a ? '<span class="pill ' + (a.abuseScore >= 25 ? 'bad' : 'good') + '">' + a.abuseScore + '%</span> ' + (a.totalReports || 0) + ' rep.' : '-') + '</td>' +
-        '<td class="v">' + esc([a && a.isp, a && a.countryCode, a && a.usageType, a && a.isTor ? 'TOR' : ''].filter(Boolean).join(' &middot; ')) + '</td>' +
-        '<td>' + (a ? '<a target="_blank" rel="noopener noreferrer" href="' + esc(a.permalink) + '">abuse</a> ' : '') +
-        (v ? '<a target="_blank" rel="noopener noreferrer" href="' + esc(v.permalink) + '">vt</a>' : '') + '</td></tr>';
-    }).join('');
-
-    $('#p-enriquecimiento').innerHTML =
-      '<div class="card"><h3>Fuente</h3><p class="small">' + esc(e.via) + ' &middot; ' + esc(e.completedAt || '') + '</p>' +
-      (e.errors.length ? '<div class="warn-box">' + e.errors.map(x => esc(x.kind + ': ' + x.message + ' (' + x.target + ')')).join('<br>') + '</div>' : '') + '</div>' +
-      table('Hashes de adjuntos', e.files) +
-      table('Dominios', e.domains) +
-      table('URLs', e.urls) +
-      (ipRows ? '<div class="card"><h3>IPs</h3><table><thead><tr><th>IP</th><th>VT</th><th>AbuseIPDB</th><th>Contexto</th><th></th></tr></thead><tbody>' + ipRows + '</tbody></table></div>' : '');
   }
 
   function base(r) {
@@ -509,27 +465,8 @@
   $('#btnReset').onclick = () => {
     current = null; batch = [];
     $('#result').hidden = true; $('#multi').hidden = true; $('#file').value = '';
-    ['#btnJson', '#btnMd', '#btnIocs', '#btnReset', '#btnEnrich'].forEach(s => $(s).disabled = true);
+    ['#btnJson', '#btnMd', '#btnIocs', '#btnReset'].forEach(s => $(s).disabled = true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  $('#btnEnrich').onclick = async e => {
-    const s = EN.loadSettings();
-    if (!s.proxyBase && !s.vtKey && !s.abuseKey) { openDlg(); return; }
-    const btn = e.target;
-    btn.disabled = true;
-    const orig = btn.textContent;
-    try {
-      current.enrichment = await EN.enrichReport(current, s, (d, t, k) => {
-        btn.textContent = 'Consultando ' + d + '/' + t + '...';
-      });
-    } catch (err) {
-      alert('Error de enriquecimiento: ' + err.message);
-    }
-    btn.textContent = orig; btn.disabled = false;
-    renderEnrich(current); renderJson(current);
-    $$('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.p === 'enriquecimiento'));
-    $$('.panel').forEach(p => p.classList.toggle('active', p.dataset.p === 'enriquecimiento'));
   };
 
   $('#tabs').onclick = e => {
@@ -539,39 +476,7 @@
     $$('.panel').forEach(p => p.classList.toggle('active', p.dataset.p === b.dataset.p));
   };
 
-  // --- ajustes -------------------------------------------------------------
-  const dlg = $('#dlg');
-  function openDlg() {
-    const s = EN.loadSettings();
-    $('#inProxy').value = s.proxyBase || '';
-    $('#inVt').value = s.vtKey || '';
-    $('#inAbuse').value = s.abuseKey || '';
-    $('#inMax').value = s.maxItems || 12;
-    $('#inDelay').value = s.delayMs || 1000;
-    if (window.PHISHTRIAGE_CONFIG) {
-      $('#dlgWarn').innerHTML = 'Detectado <code>assets/config.local.js</code>: esos valores tienen prioridad ' +
-        'salvo que guardes algo aqui. Recuerda que ese fichero esta en <code>.gitignore</code> y no debe subirse nunca.';
-      $('#dlgWarn').className = 'ok-box';
-    }
-    dlg.showModal();
-  }
-  $('#btnSettings').onclick = openDlg;
-  $('#dlgClose').onclick = () => dlg.close();
-  $('#dlgSave').onclick = () => {
-    EN.saveSettings({
-      proxyBase: $('#inProxy').value.trim(), vtKey: $('#inVt').value.trim(), abuseKey: $('#inAbuse').value.trim(),
-      maxItems: parseInt($('#inMax').value, 10) || 12, delayMs: parseInt($('#inDelay').value, 10) || 1000, enabled: true
-    });
-    dlg.close();
-    if (current) renderEnrich(current);
-  };
-  $('#dlgClear').onclick = () => {
-    EN.clearSettings();
-    $('#inProxy').value = $('#inVt').value = $('#inAbuse').value = '';
-    if (current) renderEnrich(current);
-  };
-
-  // Aviso si la pagina no se sirve por HTTPS/localhost (WebCrypto desactivado)
+  // Aviso si la página no se sirve por HTTPS/localhost (WebCrypto desactivado)
   if (!window.isSecureContext) {
     $('#offlineBadge').textContent = 'sin contexto seguro: SHA no disponible';
     $('#offlineBadge').style.color = 'var(--med)';

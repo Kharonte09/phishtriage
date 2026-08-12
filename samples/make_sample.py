@@ -29,7 +29,7 @@ https://login.microsoftonline.com/verify</a></p>
 
 PLAIN = """Estimado usuario,
 
-Su buzon de Microsoft 365 sera suspendido en 24 horas. Verifique su contrasena:
+Su buzon de Microsoft 365 será suspendido en 24 horas. Verifique su contraseña:
 http://microsoft-login.verify-account.tk/o365/login.php?id=dGFyZ2V0
 
 Soporte Microsoft 365
@@ -68,7 +68,7 @@ X-Mailer: PHPMailer 6.8.0 (https://github.com/PHPMailer/PHPMailer)
 X-Originating-IP: [45.155.205.233]
 X-Priority: 1 (Highest)
 Importance: High
-MIME-Version: 1.0
+MIME-Versión: 1.0
 Content-Type: multipart/mixed; boundary="=_outer_9911"
 
 --=_outer_9911

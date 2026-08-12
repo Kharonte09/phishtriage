@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PhishTriage - analizador de .eml</title>
-<meta name="description" content="Analizador de correos .eml en el navegador: cabeceras, SPF/DKIM/DMARC, cadena Received, URLs defanged, hashes de adjuntos e IOCs. Sin subir nada a ningun servidor.">
+<meta name="description" content="Analizador de correos .eml en el navegador: cabeceras, SPF/DKIM/DMARC, cadena Received, URLs defanged, hashes de adjuntos e IOCs. Sin subir nada a ningún servidor.">
 <meta name="color-scheme" content="dark">
 <link rel="stylesheet" href="assets/styles.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#127907;</text></svg>">
@@ -14,24 +14,22 @@
 <header class="top">
   <div class="wrap">
     <div class="logo">phish<span>triage</span></div>
-    <div class="tagline">Triaje de correos <code>.eml</code>: cabeceras, autenticacion, cadena de saltos, URLs e IOCs.</div>
+    <div class="tagline">Triaje de correos <code>.eml</code>: cabeceras, autenticación, cadena de saltos, URLs e IOCs.</div>
     <span class="badge-offline" id="offlineBadge">100% en tu navegador</span>
-    <button id="btnSettings">Ajustes</button>
   </div>
 </header>
 
 <main class="wrap">
 
   <div id="drop">
-    <h2>Suelta aqui un fichero .eml / .msg-exportado</h2>
-    <p>o haz clic para elegirlo. Tambien puedes pegar el correo en bruto con <b>Ctrl+V</b>.</p>
-    <p class="hint muted">El fichero no sale de tu equipo: todo el parseo ocurre en esta pestana.</p>
+    <h2>Suelta aquí un fichero .eml / .msg-exportado</h2>
+    <p>o haz clic para elegirlo. También puedes pegar el correo en bruto con <b>Ctrl+V</b>.</p>
+    <p class="hint muted">El fichero no sale de tu equipo: todo el parseo ocurre en esta pestaña.</p>
     <input type="file" id="file" accept=".eml,.txt,message/rfc822" multiple hidden>
   </div>
 
   <div class="toolbar">
     <button id="btnSample">Cargar correo de ejemplo</button>
-    <button id="btnEnrich" disabled>Enriquecer (VT / AbuseIPDB)</button>
     <button id="btnJson" disabled>Descargar JSON</button>
     <button id="btnMd" disabled>Descargar informe .md</button>
     <button id="btnIocs" disabled>Copiar IOCs</button>
@@ -77,13 +75,12 @@
       <button data-p="resumen">Resumen</button>
       <button data-p="hallazgos">Hallazgos <span class="n" id="nFind"></span></button>
       <button data-p="cabeceras">Cabeceras <span class="n" id="nHead"></span></button>
-      <button data-p="auth">Autenticacion</button>
+      <button data-p="auth">Autenticación</button>
       <button data-p="received">Received <span class="n" id="nHops"></span></button>
       <button data-p="urls">URLs <span class="n" id="nUrls"></span></button>
       <button data-p="adjuntos">Adjuntos <span class="n" id="nAtt"></span></button>
       <button data-p="cuerpo">Cuerpo</button>
       <button data-p="iocs">IOCs</button>
-      <button data-p="enriquecimiento">Enriquecimiento</button>
       <button data-p="json">JSON</button>
     </nav>
 
@@ -97,61 +94,19 @@
     <section class="panel" data-p="adjuntos" id="p-adjuntos"></section>
     <section class="panel" data-p="cuerpo" id="p-cuerpo"></section>
     <section class="panel" data-p="iocs" id="p-iocs"></section>
-    <section class="panel" data-p="enriquecimiento" id="p-enriquecimiento"></section>
     <section class="panel" data-p="json" id="p-json"></section>
   </div>
 
   <div id="multi" hidden></div>
 
   <footer>
-    PhishTriage - analisis heuristico, no un veredicto definitivo. Verifica siempre a mano antes de bloquear o denunciar.
-    &middot; <a href="https://github.com/Kharonte09/phishtriage" target="_blank" rel="noopener noreferrer">codigo fuente</a>
+    PhishTriage - análisis heurístico, no un veredicto definitivo. Verifica siempre a mano antes de bloquear o denunciar.
+    &middot; <a href="https://github.com/Kharonte09/phishtriage" target="_blank" rel="noopener noreferrer">código fuente</a>
   </footer>
 </main>
 
-<dialog id="dlg">
-  <h3>Ajustes de enriquecimiento</h3>
-  <div class="warn-box" id="dlgWarn">
-    Las claves que escribas aqui se guardan <b>solo en el localStorage de este navegador</b> y viajan en las
-    peticiones a VirusTotal / AbuseIPDB. En una pagina publica cualquiera con acceso al equipo puede leerlas:
-    usa claves personales de solo lectura, nunca corporativas.
-    <br><br>
-    Recomendado: levanta <code>cli/proxy.py</code> en <code>http://127.0.0.1:8787</code> y pon esa URL en
-    "Proxy". Asi las claves viven en variables de entorno del proxy y no tocan el navegador.
-  </div>
-
-  <label class="f" for="inProxy">Proxy (opcional, recomendado)</label>
-  <input type="text" id="inProxy" placeholder="http://127.0.0.1:8787" autocomplete="off">
-
-  <label class="f" for="inVt">API key de VirusTotal (si no usas proxy)</label>
-  <input type="password" id="inVt" placeholder="64 caracteres hex" autocomplete="off">
-
-  <label class="f" for="inAbuse">API key de AbuseIPDB (si no usas proxy)</label>
-  <input type="password" id="inAbuse" placeholder="80 caracteres hex" autocomplete="off">
-
-  <div class="row" style="margin-top:10px">
-    <div style="flex:1">
-      <label class="f" for="inMax">Max. items por tipo</label>
-      <input type="number" id="inMax" min="1" max="50" value="12">
-    </div>
-    <div style="flex:1">
-      <label class="f" for="inDelay">Espera entre peticiones (ms)</label>
-      <input type="number" id="inDelay" min="0" max="60000" step="250" value="1000">
-    </div>
-  </div>
-  <p class="small">La API publica de VirusTotal permite 4 peticiones/minuto: con 15000 ms vas sobrado.</p>
-
-  <div class="toolbar" style="justify-content:flex-end">
-    <button id="dlgClear">Borrar claves</button>
-    <button id="dlgClose">Cancelar</button>
-    <button id="dlgSave" class="primary">Guardar</button>
-  </div>
-</dialog>
 
 <script src="assets/eml.js"></script>
-<script src="assets/enrich.js"></script>
-<!-- Opcional y NO versionado: copia config.example.js a config.local.js para pruebas en 127.0.0.1 -->
-<script src="assets/config.local.js" onerror="void 0"></script>
 <script src="assets/app.js"></script>
 </body>
 </html>

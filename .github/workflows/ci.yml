@@ -26,9 +26,6 @@ jobs:
           node --version
           python3 --version
 
-      - name: Regenerar el correo de ejemplo
-        run: python3 samples/make_sample.py
-
       - name: Motor JS + paridad con el CLI
         run: node tests/run-tests.mjs
 
@@ -51,4 +48,3 @@ jobs:
             echo "posible clave hardcodeada"
             exit 1
           fi
-          test ! -f assets/config.local.js

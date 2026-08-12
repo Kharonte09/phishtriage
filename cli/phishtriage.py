@@ -6,19 +6,19 @@ Traga uno o varios .eml y escupe el informe: cabeceras parseadas, SPF/DKIM/DMARC
 cadena Received con los saltos, URLs extraidas y defanged, adjuntos con su hash y
 enriquecimiento opcional contra VirusTotal y AbuseIPDB.
 
-Sin dependencias: solo biblioteca estandar.
+Sin dependencias: solo biblioteca estándar.
 
 Uso:
     python3 phishtriage.py correo.eml
     python3 phishtriage.py *.eml --json informes/
     python3 phishtriage.py correo.eml --enrich --md informe.md
 
-Claves de API (nunca en el codigo):
+Claves de API (nunca en el código):
     export VT_API_KEY=...
     export ABUSEIPDB_API_KEY=...
   o un fichero .env junto a este script (ver .env.example).
 
-Codigos de salida: 0 riesgo bajo, 1 medio, 2 alto, 3 critico, 10 error.
+Códigos de salida: 0 riesgo bajo, 1 medio, 2 alto, 3 critico, 10 error.
 """
 
 from __future__ import annotations
@@ -41,7 +41,14 @@ from datetime import datetime, timezone
 from email.header import decode_header, make_header
 from email.utils import getaddresses, parsedate_to_datetime
 
-VERSION = "1.0"
+VERSION = "1.1"
+
+# La consola de Windows viene en cp850/cp1252 y revienta al imprimir "ñ" o "á".
+for _flujo in (sys.stdout, sys.stderr):
+    try:
+        _flujo.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):  # flujo redirigido de forma rara
+        pass
 
 # ---------------------------------------------------------------------------
 # Listas y constantes (espejo de assets/eml.js)
@@ -111,11 +118,10 @@ CRED_WORDS = re.compile(
     r"sso|mfa|otp|token|wallet|seed|kyc)", re.I)
 
 URGENCY = re.compile(
-    r"(urgente|inmediat|caduca|expira|vence|suspend|bloquea|bloqueo|verifica|verificar|"
-    r"confirma|ultimo aviso|último aviso|accion requerida|acción requerida|24 horas|"
-    r"48 horas|reembolso|factura|impag|multa|sancion|sanción|premio|herencia|urgent|"
-    r"immediate|expires?|suspended|verify|confirm|action required|final notice|password|"
-    r"invoice|payment|overdue|refund|wire|gift card)", re.I)
+    r"(urgente|inmediat|caduca|expira|vence|suspend|bloquea|bloqueo|último aviso|"
+    r"último aviso|accion requerida|acción requerida|24 horas|48 horas|impag|multa|"
+    r"sanción|sanción|premio|herencia|urgent|immediate|expires?|suspended|"
+    r"action required|final notice|overdue|last warning)", re.I)
 
 URL_RE = re.compile(
     r"""(?:https?|ftp|file)://[^\s<>"'`)\]}]+|www\.[a-z0-9-]+(?:\.[a-z0-9-]+)+[^\s<>"'`)\]}]*""",
@@ -132,7 +138,96 @@ REDIRECT_HOSTS = [
     re.compile(r"\.sendgrid\.net$", re.I),
 ]
 
-SEV_POINTS = {"high": 20, "medium": 10, "low": 4, "info": 0}
+# ---------------------------------------------------------------------------
+# PONDERACION (espejo exacto de assets/eml.js: si cambias una, cambia la otra;
+# el test tests/run-tests.mjs compara las dos tablas y falla si divergen)
+# ---------------------------------------------------------------------------
+CATEGORIAS = {
+    "auth": {"techo": 30, "nombre": "Autenticación"},
+    "identidad": {"techo": 20, "nombre": "Identidad del remitente"},
+    "enlaces": {"techo": 20, "nombre": "Enlaces"},
+    "adjuntos": {"techo": 15, "nombre": "Adjuntos"},
+    "contenido": {"techo": 10, "nombre": "Contenido del mensaje"},
+    "transporte": {"techo": 5, "nombre": "Transporte y cabeceras"},
+}
+
+PESOS = {
+    # --- Autenticación (techo 30)
+    "spf-fail": {"cat": "auth", "pts": 25, "sev": "high"},
+    "spf-softfail": {"cat": "auth", "pts": 12, "sev": "medium"},
+    "spf-none": {"cat": "auth", "pts": 8, "sev": "medium"},
+    "spf-neutral": {"cat": "auth", "pts": 8, "sev": "medium"},
+    "dkim-fail": {"cat": "auth", "pts": 20, "sev": "high"},
+    "dkim-none": {"cat": "auth", "pts": 8, "sev": "medium"},
+    "dkim-absent": {"cat": "auth", "pts": 8, "sev": "medium"},
+    "dmarc-fail": {"cat": "auth", "pts": 30, "sev": "high"},
+    "dmarc-none": {"cat": "auth", "pts": 10, "sev": "medium"},
+    "dmarc-absent": {"cat": "auth", "pts": 10, "sev": "medium"},
+    "compauth": {"cat": "auth", "pts": 10, "sev": "medium"},
+    "align-none": {"cat": "auth", "pts": 20, "sev": "high"},
+    "align-dkim": {"cat": "auth", "pts": 10, "sev": "medium"},
+    "no-transport": {"cat": "auth", "pts": 0, "sev": "info"},
+    # --- Identidad del remitente (techo 20)
+    "rp-mismatch": {"cat": "identidad", "pts": 15, "sev": "high"},
+    "replyto-mismatch": {"cat": "identidad", "pts": 18, "sev": "high"},
+    "dn-email": {"cat": "identidad", "pts": 22, "sev": "high"},
+    "dn-brand": {"cat": "identidad", "pts": 18, "sev": "high"},
+    "dn-homoglyph": {"cat": "identidad", "pts": 12, "sev": "medium"},
+    "from-punycode": {"cat": "identidad", "pts": 20, "sev": "high"},
+    "from-tld": {"cat": "identidad", "pts": 10, "sev": "medium"},
+    "from-multi": {"cat": "identidad", "pts": 10, "sev": "medium"},
+    "from-missing": {"cat": "identidad", "pts": 10, "sev": "medium"},
+    "mid-missing": {"cat": "identidad", "pts": 10, "sev": "medium"},
+    "mid-mismatch": {"cat": "identidad", "pts": 6, "sev": "low"},
+    # --- Enlaces (techo 20)
+    "url-mismatch": {"cat": "enlaces", "pts": 20, "sev": "high"},
+    "url-ip": {"cat": "enlaces", "pts": 20, "sev": "high"},
+    "url-punycode": {"cat": "enlaces", "pts": 20, "sev": "high"},
+    "url-userinfo": {"cat": "enlaces", "pts": 20, "sev": "high"},
+    "url-data": {"cat": "enlaces", "pts": 25, "sev": "high"},
+    "url-brand": {"cat": "enlaces", "pts": 18, "sev": "high"},
+    "url-shortener": {"cat": "enlaces", "pts": 10, "sev": "medium"},
+    "url-creds": {"cat": "enlaces", "pts": 10, "sev": "medium"},
+    "url-tld": {"cat": "enlaces", "pts": 8, "sev": "medium"},
+    "url-port": {"cat": "enlaces", "pts": 8, "sev": "medium"},
+    "url-http": {"cat": "enlaces", "pts": 6, "sev": "medium"},
+    "url-subdomains": {"cat": "enlaces", "pts": 4, "sev": "low"},
+    "url-redirector": {"cat": "enlaces", "pts": 0, "sev": "info"},
+    # --- Adjuntos (techo 15)
+    "att-exec": {"cat": "adjuntos", "pts": 25, "sev": "high"},
+    "att-double": {"cat": "adjuntos", "pts": 22, "sev": "high"},
+    "att-rtlo": {"cat": "adjuntos", "pts": 22, "sev": "high"},
+    "att-macro": {"cat": "adjuntos", "pts": 20, "sev": "high"},
+    "att-html": {"cat": "adjuntos", "pts": 20, "sev": "high"},
+    "att-mismatch": {"cat": "adjuntos", "pts": 20, "sev": "high"},
+    "att-ole": {"cat": "adjuntos", "pts": 10, "sev": "medium"},
+    "att-container": {"cat": "adjuntos", "pts": 8, "sev": "medium"},
+    "att-empty": {"cat": "adjuntos", "pts": 0, "sev": "info"},
+    # --- Contenido del mensaje (techo 10)
+    "body-password": {"cat": "contenido", "pts": 25, "sev": "high"},
+    "body-form": {"cat": "contenido", "pts": 20, "sev": "high"},
+    "body-script": {"cat": "contenido", "pts": 18, "sev": "high"},
+    "body-refresh": {"cat": "contenido", "pts": 18, "sev": "high"},
+    "body-bec": {"cat": "contenido", "pts": 15, "sev": "high"},
+    "body-iframe": {"cat": "contenido", "pts": 12, "sev": "medium"},
+    "body-image": {"cat": "contenido", "pts": 12, "sev": "medium"},
+    "body-hidden": {"cat": "contenido", "pts": 10, "sev": "medium"},
+    "body-crypto": {"cat": "contenido", "pts": 10, "sev": "medium"},
+    "body-empty": {"cat": "contenido", "pts": 8, "sev": "medium"},
+    "body-entities": {"cat": "contenido", "pts": 6, "sev": "low"},
+    "subj-urgency": {"cat": "contenido", "pts": 8, "sev": "medium"},
+    "subj-nothread": {"cat": "contenido", "pts": 8, "sev": "medium"},
+    "subj-fakereply": {"cat": "contenido", "pts": 5, "sev": "low"},
+    # --- Transporte y cabeceras (techo 5)
+    "xmailer": {"cat": "transporte", "pts": 10, "sev": "medium"},
+    "rcv-none": {"cat": "transporte", "pts": 10, "sev": "medium"},
+    "rcv-one": {"cat": "transporte", "pts": 5, "sev": "low"},
+    "rcv-delay": {"cat": "transporte", "pts": 4, "sev": "low"},
+    "date-skew": {"cat": "transporte", "pts": 5, "sev": "low"},
+    "x-orig-ip": {"cat": "transporte", "pts": 0, "sev": "info"},
+}
+
+UMBRALES = [(80, "CRITICO"), (50, "ALTO"), (20, "MEDIO"), (0, "BAJO")]
 
 
 # ---------------------------------------------------------------------------
@@ -210,7 +305,7 @@ def magic_of(data: bytes):
 
 
 # ---------------------------------------------------------------------------
-# Analisis
+# Análisis
 # ---------------------------------------------------------------------------
 
 def parse_addresses(raw):
@@ -384,41 +479,41 @@ def extract_links(html_text: str, plain_text: str):
         tld = host.rsplit(".", 1)[-1] if "." in host else ""
         flags = []
         if is_ip(host):
-            flags.append(("high", "URL apunta a una IP directa, sin dominio"))
+            flags.append(("url-ip", "high", "URL apunta a una IP directa, sin dominio"))
         if re.search(r"(^|\.)xn--", host, re.I):
-            flags.append(("high", "Dominio punycode (posible homoglifo IDN)"))
+            flags.append(("url-punycode", "high", "Dominio punycode (posible homoglifo IDN)"))
         if p["userinfo"]:
-            flags.append(("high", f"Autoridad con \"@\" ({p['userinfo']}@): oculta el host real"))
+            flags.append(("url-userinfo", "high", f"Autoridad con \"@\" ({p['userinfo']}@): oculta el host real"))
         if od in SHORTENERS:
-            flags.append(("medium", "Acortador de URL: destino oculto"))
+            flags.append(("url-shortener", "medium", "Acortador de URL: destino oculto"))
         if any(r.search(host) for r in REDIRECT_HOSTS):
-            flags.append(("info", "Host de redireccion/tracking"))
+            flags.append(("url-redirector", "info", "Host de redirección/tracking"))
         if p["port"] and p["port"] not in ("80", "443"):
-            flags.append(("medium", f"Puerto no estandar: {p['port']}"))
+            flags.append(("url-port", "medium", f"Puerto no estándar: {p['port']}"))
         if tld in RISKY_TLD:
-            flags.append(("medium", f"TLD de alto abuso: .{tld}"))
+            flags.append(("url-tld", "medium", f"TLD de alto abuso: .{tld}"))
         if CRED_WORDS.search(p["path"]):
-            flags.append(("medium", "Ruta con palabras de robo de credenciales"))
+            flags.append(("url-creds", "medium", "Ruta con palabras de robo de credenciales"))
             if p["scheme"] == "http":
-                flags.append(("medium", "Formulario sensible sobre HTTP sin cifrar"))
+                flags.append(("url-http", "medium", "Formulario sensible sobre HTTP sin cifrar"))
         if host.count(".") >= 4:
-            flags.append(("low", f"Exceso de subdominios ({host})"))
+            flags.append(("url-subdomains", "low", f"Exceso de subdominios ({host})"))
         squashed = re.sub(r"[^a-z0-9]", "", host)
         first_label = od.split(".")[0] if od else ""
         for b in BRANDS:
             if b in squashed and not first_label.startswith(b):
-                flags.append(("high", f"Marca \"{b}\" en subdominio/ruta de un dominio ajeno"))
+                flags.append(("url-brand", "high", f"Marca \"{b}\" en subdominio/ruta de un dominio ajeno"))
                 break
         for t in entry["texts"]:
             tm = URL_RE.search(t)
             if tm:
                 sp = parse_url(tm.group(0))
                 if sp and sp["host"] and org_domain(sp["host"]) != od:
-                    flags.append(("high", f"El texto muestra {sp['host']} pero el enlace va a {host}"))
+                    flags.append(("url-mismatch", "high", f"El texto muestra {sp['host']} pero el enlace va a {host}"))
         out.append({"url": p["url"], "defanged": defang(p["url"]), "scheme": p["scheme"],
                     "host": host, "orgDomain": od, "port": p["port"], "path": p["path"][:300],
                     "anchorTexts": entry["texts"], "sources": entry["sources"],
-                    "flags": [{"sev": s, "msg": m} for s, m in flags]})
+                    "flags": [{"id": i, "sev": s, "msg": m} for i, s, m in flags]})
     return out
 
 
@@ -447,21 +542,23 @@ def collect_parts(msg):
         magic = magic_of(payload)
         flags = []
         if ext in EXEC_EXT:
-            flags.append(("high", f"Extension ejecutable/script: .{ext}"))
+            flags.append(("att-exec", "high", f"Extensión ejecutable/script: .{ext}"))
         if ext in MACRO_EXT:
-            flags.append(("high", f"Office con macros habilitadas: .{ext}"))
+            flags.append(("att-macro", "high", f"Office con macros habilitadas: .{ext}"))
         if ext in CONTAINER_EXT:
-            flags.append(("medium", f"Contenedor (.{ext}): puede ocultar el payload"))
+            flags.append(("att-container", "medium", f"Contenedor (.{ext}): puede ocultar el payload"))
         if ext in HTML_EXT:
-            flags.append(("high", "Adjunto HTML/SVG: tipico de phishing local (smuggling)"))
+            flags.append(("att-html", "high", "Adjunto HTML/SVG: tipico de phishing local (smuggling)"))
         if re.search(r"\.[a-z0-9]{2,4}\s*\.[a-z0-9]{2,4}$", name, re.I):
-            flags.append(("high", "Doble extension en el nombre"))
+            flags.append(("att-double", "high", "Doble extensión en el nombre"))
         if re.search(r"[‪-‮⁦-⁩]", name):
-            flags.append(("high", "Caracteres de control bidireccional (RTLO) en el nombre"))
+            flags.append(("att-rtlo", "high", "Caracteres de control bidireccional (RTLO) en el nombre"))
+        if magic == "OLE2 (Office 97-2003)" and ext not in ("doc", "xls", "ppt"):
+            flags.append(("att-ole", "medium", f"Contenedor OLE2 con extensión .{ext}"))
         if magic == "PE/DOS ejecutable (MZ)" and ext not in EXEC_EXT:
-            flags.append(("high", f"Cabecera MZ pero extension .{ext}: tipo declarado falso"))
+            flags.append(("att-mismatch", "high", f"Cabecera MZ pero extensión .{ext}: tipo declarado falso"))
         if not payload:
-            flags.append(("info", "Adjunto vacio"))
+            flags.append(("att-empty", "info", "Adjunto vacio"))
         attachments.append({
             "filename": name, "mime": ctype, "disposition": disp,
             "declaredEncoding": part.get("content-transfer-encoding", "7bit"),
@@ -470,7 +567,7 @@ def collect_parts(msg):
             "md5": hashlib.md5(payload).hexdigest(),
             "sha1": hashlib.sha1(payload).hexdigest(),
             "sha256": hashlib.sha256(payload).hexdigest(),
-            "flags": [{"sev": s, "msg": m} for s, m in flags],
+            "flags": [{"id": i, "sev": s, "msg": m} for i, s, m in flags],
         })
     return "\n\n".join(plains), "\n\n".join(htmls), attachments
 
@@ -498,8 +595,10 @@ def analyze(raw_bytes: bytes, filename: str = None) -> dict:
     msg = email.message_from_bytes(raw_bytes, policy=email.policy.compat32)
     findings = []
 
-    def push(sev, points, fid, msg_):
-        findings.append({"sev": sev, "points": points, "id": fid, "msg": msg_})
+    def push(fid, msg_):
+        p = PESOS.get(fid, {"cat": "contenido", "pts": 0, "sev": "info"})
+        findings.append({"id": fid, "msg": msg_, "cat": p["cat"],
+                         "sev": p["sev"], "points": p["pts"]})
 
     frm = parse_addresses(msg.get("from"))
     reply_to = parse_addresses(msg.get("reply-to"))
@@ -517,43 +616,43 @@ def analyze(raw_bytes: bytes, filename: str = None) -> dict:
     urls = extract_links(html_body, plain)
 
     # Un .eml reconstruido o exportado a mano no conserva cabeceras de transporte:
-    # en ese caso su ausencia no es un indicio, solo una limitacion del analisis.
+    # en ese caso su ausencia no es un indicio, solo una limitacion del análisis.
     no_transport = not auth["raw"] and not hops
     if no_transport:
-        push("info", 0, "no-transport",
+        push("no-transport",
              "El fichero no conserva cabeceras de transporte (Received/Authentication-Results): "
-             "analisis limitado al contenido")
+             "análisis limitado al contenido")
 
-    # --- autenticacion
+    # --- autenticación
     spf, dkim, dmarc = (auth["spf"] or ""), (auth["dkim"] or ""), (auth["dmarc"] or "")
     if spf == "fail":
-        push("high", 25, "spf-fail", "SPF fail: el servidor emisor no esta autorizado por el dominio del sobre")
+        push("spf-fail", "SPF fail: el servidor emisor no está autorizado por el dominio del sobre")
     elif spf == "softfail":
-        push("medium", 12, "spf-softfail", "SPF softfail")
+        push("spf-softfail", "SPF softfail")
     elif not spf:
         if not no_transport:
-            push("medium", 8, "spf-none", "Sin resultado SPF en las cabeceras")
+            push("spf-none", "Sin resultado SPF en las cabeceras")
     elif spf in ("none", "neutral"):
-        push("medium", 8, "spf-neutral", f"SPF {spf}: el dominio no publica politica utilizable")
+        push("spf-neutral", f"SPF {spf}: el dominio no pública política utilizable")
 
     if dkim == "fail":
-        push("high", 20, "dkim-fail", "DKIM fail: la firma no valida (contenido alterado o firma falsa)")
+        push("dkim-fail", "DKIM fail: la firma no valida (contenido alterado o firma falsa)")
     elif not dkim:
         if not no_transport:
-            push("medium", 8, "dkim-none", "Sin resultado DKIM en las cabeceras")
+            push("dkim-none", "Sin resultado DKIM en las cabeceras")
     elif dkim == "none":
-        push("medium", 8, "dkim-absent", "DKIM none: el mensaje no viene firmado")
+        push("dkim-absent", "DKIM none: el mensaje no viene firmado")
 
     if dmarc == "fail":
-        push("high", 30, "dmarc-fail", "DMARC fail: no hay alineamiento con el dominio del From")
+        push("dmarc-fail", "DMARC fail: no hay alineamiento con el dominio del From")
     elif not dmarc:
         if not no_transport:
-            push("medium", 10, "dmarc-none", "Sin resultado DMARC en las cabeceras")
+            push("dmarc-none", "Sin resultado DMARC en las cabeceras")
     elif dmarc == "none":
-        push("medium", 10, "dmarc-absent", "DMARC none: dominio sin politica DMARC")
+        push("dmarc-absent", "DMARC none: dominio sin política DMARC")
 
     if auth["compauth"] in ("fail", "softpass", "none"):
-        push("medium", 10, "compauth", f"compauth={auth['compauth']} (autenticacion compuesta debil)")
+        push("compauth", f"compauth={auth['compauth']} (autenticación compuesta debil)")
 
     alignment = {"spf": None, "dkim": None}
     if from_org and auth["spfDomain"]:
@@ -561,66 +660,66 @@ def analyze(raw_bytes: bytes, filename: str = None) -> dict:
     if from_org and auth["dkimDomain"]:
         alignment["dkim"] = org_domain(auth["dkimDomain"]) == from_org
     if alignment["spf"] is False and alignment["dkim"] is not True:
-        push("high", 20, "align-none",
-             f"Ningun identificador alinea con el From ({from_org}): SPF={auth['spfDomain'] or 'n/d'}, "
+        push("align-none",
+             f"Ningún identificador alinea con el From ({from_org}): SPF={auth['spfDomain'] or 'n/d'}, "
              f"DKIM={auth['dkimDomain'] or 'sin firma'}")
     elif alignment["dkim"] is False and auth["dkimDomain"]:
-        push("medium", 10, "align-dkim", f"DKIM firma como {auth['dkimDomain']}, no como {from_org}")
+        push("align-dkim", f"DKIM firma como {auth['dkimDomain']}, no como {from_org}")
 
     # --- identidad
     if return_path and from_org and return_path[0]["orgDomain"] and return_path[0]["orgDomain"] != from_org:
-        push("high", 15, "rp-mismatch",
+        push("rp-mismatch",
              f"Return-Path ({return_path[0]['orgDomain']}) distinto del From ({from_org})")
     if reply_to and from_org and reply_to[0]["orgDomain"] and reply_to[0]["orgDomain"] != from_org:
-        push("high", 18, "replyto-mismatch",
+        push("replyto-mismatch",
              f"Reply-To apunta a {reply_to[0]['address']}, dominio ajeno al remitente")
     if frm:
         dn = frm[0]["name"] or ""
         m = re.search(r"[\w.+-]+@[\w.-]+\.\w+", dn)
         if m and org_domain(m.group(0).split("@")[1]) != from_org:
-            push("high", 22, "dn-email",
-                 f"El nombre visible contiene otra direccion ({m.group(0)}) distinta de la real")
+            push("dn-email",
+                 f"El nombre visible contiene otra dirección ({m.group(0)}) distinta de la real")
         dn_norm = re.sub(r"[^a-z0-9]", "", dn.lower())
         for b in BRANDS:
             if b in dn_norm and from_org and b not in re.sub(r"[^a-z0-9]", "", from_org):
-                push("high", 18, "dn-brand", f"Nombre visible suplanta a \"{b}\" desde el dominio {from_org}")
+                push("dn-brand", f"Nombre visible suplanta a \"{b}\" desde el dominio {from_org}")
                 break
         if re.search(r"[Ѐ-ӿͰ-Ͽ]", dn + frm[0]["address"]):
-            push("medium", 12, "dn-homoglyph", "Caracteres cirilicos/griegos en el remitente: posible homoglifo")
+            push("dn-homoglyph", "Caracteres cirilicos/griegos en el remitente: posible homoglifo")
         if re.search(r"(^|\.)xn--", frm[0]["domain"] or "", re.I):
-            push("high", 20, "from-punycode", f"Dominio del remitente en punycode: {frm[0]['domain']}")
+            push("from-punycode", f"Dominio del remitente en punycode: {frm[0]['domain']}")
         tld = (frm[0]["domain"] or "").rsplit(".", 1)[-1]
         if tld in RISKY_TLD:
-            push("medium", 10, "from-tld", f"TLD de alto abuso en el remitente: .{tld}")
+            push("from-tld", f"TLD de alto abuso en el remitente: .{tld}")
         if len(frm) > 1:
-            push("medium", 10, "from-multi", f"Multiples direcciones en From ({len(frm)}): tecnica de evasion")
+            push("from-multi", f"Múltiples direcciones en From ({len(frm)}): técnica de evasión")
     else:
-        push("medium", 10, "from-missing", "Sin cabecera From")
+        push("from-missing", "Sin cabecera From")
 
     if not message_id:
         if not no_transport:
-            push("medium", 10, "mid-missing", "Sin Message-ID: generado por herramienta de envio masivo o script")
+            push("mid-missing", "Sin Message-ID: generado por herramienta de envio masivo o script")
     else:
         m = re.search(r"@([^>\s]+)>?\s*$", message_id)
         if m and from_org and org_domain(m.group(1)) != from_org:
-            push("low", 6, "mid-mismatch",
+            push("mid-mismatch",
                  f"Dominio del Message-ID ({org_domain(m.group(1))}) distinto del From")
 
     xmailer = msg.get("x-mailer") or msg.get("user-agent") or ""
     if re.search(r"phpmailer|swiftmailer|python|smtplib|mass|bulk|mailer\s*script", xmailer, re.I):
-        push("medium", 10, "xmailer", f"X-Mailer sospechoso: {xmailer.strip()}")
+        push("xmailer", f"X-Mailer sospechoso: {xmailer.strip()}")
     if msg.get("x-originating-ip"):
-        push("info", 0, "x-orig-ip", "X-Originating-IP: " + msg.get("x-originating-ip").strip("[]"))
+        push("x-orig-ip", "X-Originating-IP: " + msg.get("x-originating-ip").strip("[]"))
 
     # --- received
     if not hops:
         if not no_transport:
-            push("medium", 10, "rcv-none", "Sin cabeceras Received: inyeccion local o cabeceras eliminadas")
+            push("rcv-none", "Sin cabeceras Received: inyección local o cabeceras eliminadas")
     elif len(hops) == 1:
-        push("low", 5, "rcv-one", "Un unico salto Received: entrega directa al MX")
+        push("rcv-one", "Un único salto Received: entrega directa al MX")
     for h in hops:
         if h["delaySeconds"] and h["delaySeconds"] > 3600:
-            push("low", 4, "rcv-delay",
+            push("rcv-delay",
                  f"Salto con {h['delaySeconds'] // 60} min de retardo (hop {h['hop']})")
             break
 
@@ -628,36 +727,36 @@ def analyze(raw_bytes: bytes, filename: str = None) -> dict:
 
     # --- asunto y cuerpo
     if URGENCY.search(subject or ""):
-        push("medium", 8, "subj-urgency", "Asunto con lenguaje de urgencia/presion")
+        push("subj-urgency", "Asunto con lenguaje de urgencia/presión")
     if re.match(r"^\s*(re|fw|fwd|rv)\s*:", subject or "", re.I) and not msg.get("in-reply-to") and not msg.get("references"):
-        push("medium", 8, "subj-nothread", "Simula responder a un hilo pero no hay In-Reply-To ni References")
+        push("subj-nothread", "Simula responder a un hilo pero no hay In-Reply-To ni References")
     if html_body:
         if re.search(r"<form\b", html_body, re.I):
-            push("high", 20, "body-form", "Formulario HTML embebido en el correo (captura de credenciales)")
+            push("body-form", "Formulario HTML embebido en el correo (captura de credenciales)")
         if re.search(r"type\s*=\s*[\"']?password", html_body, re.I):
-            push("high", 25, "body-password", "Campo de contrasena en el HTML del correo")
+            push("body-password", "Campo de contraseña en el HTML del correo")
         if re.search(r"<script\b", html_body, re.I):
-            push("high", 18, "body-script", "Etiqueta <script> en el cuerpo")
+            push("body-script", "Etiqueta <script> en el cuerpo")
         if re.search(r"<iframe\b", html_body, re.I):
-            push("medium", 12, "body-iframe", "iframe embebido")
+            push("body-iframe", "iframe embebido")
         if re.search(r"http-equiv\s*=\s*[\"']?refresh", html_body, re.I):
-            push("high", 18, "body-refresh", "meta refresh: redireccion automatica")
+            push("body-refresh", "meta refresh: redirección automatica")
         hidden = re.findall(r"(font-size\s*:\s*0|display\s*:\s*none|visibility\s*:\s*hidden|color\s*:\s*#?f{3,6}\b)",
                             html_body, re.I)
         if len(hidden) >= 2:
-            push("medium", 10, "body-hidden", f"Texto oculto/invisible ({len(hidden)} ocurrencias): evasion de filtros")
+            push("body-hidden", f"Texto oculto/invisible ({len(hidden)} ocurrencias): evasión de filtros")
         text_len = len(re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html_body)).strip())
         imgs = len(re.findall(r"<img\b", html_body, re.I))
         if imgs and text_len < 120:
-            push("medium", 12, "body-image", f"Correo casi solo imagen ({imgs} img, {text_len} chars)")
+            push("body-image", f"Correo casi solo imagen ({imgs} img, {text_len} chars)")
     if not html_body and not plain and attachments:
-        push("medium", 8, "body-empty", "Cuerpo vacio con adjunto: patron de malware/spear-phishing")
+        push("body-empty", "Cuerpo vacio con adjunto: patron de malware/spear-phishing")
     blob = f"{plain} {subject}"
     if re.search(r"(bitcoin|btc|usdt|ethereum|monero|wallet|seed phrase|frase semilla|criptomoneda)", blob, re.I):
-        push("medium", 10, "body-crypto", "Referencias a criptomonedas (extorsion o fraude de inversion)")
+        push("body-crypto", "Referencias a criptomonedas (extorsión o fraude de inversión)")
     if re.search(r"(transferencia|wire transfer|iban|swift|cambio de cuenta|datos bancarios|nomina|payroll)", blob, re.I) \
             and (reply_to or alignment["dkim"] is False):
-        push("high", 15, "body-bec", "Patron BEC: instrucciones de pago con remitente no alineado")
+        push("body-bec", "Patron BEC: instrucciones de pago con remitente no alineado")
 
     seen = set()
     for u in urls:
@@ -666,13 +765,20 @@ def analyze(raw_bytes: bytes, filename: str = None) -> dict:
             if key in seen:
                 continue
             seen.add(key)
-            push(f["sev"], SEV_POINTS[f["sev"]], "url", f"{f['msg']} -> {defang(u['url'])[:160]}")
+            push(f["id"], f"{f['msg']} -> {defang(u['url'])[:160]}")
     for a in attachments:
         for f in a["flags"]:
-            push(f["sev"], SEV_POINTS[f["sev"]], "att", f"{f['msg']} [{a['filename']}]")
+            push(f["id"], f"{f['msg']} [{a['filename']}]")
 
-    score = min(100, sum(f["points"] for f in findings))
-    verdict = "CRITICO" if score >= 80 else "ALTO" if score >= 50 else "MEDIO" if score >= 20 else "BAJO"
+    desglose = []
+    for cat, meta in CATEGORIAS.items():
+        dela = [f for f in findings if f["cat"] == cat]
+        bruto = sum(f["points"] for f in dela)
+        desglose.append({"cat": cat, "nombre": meta["nombre"], "bruto": bruto,
+                         "techo": meta["techo"], "puntos": min(bruto, meta["techo"]),
+                         "reglas": len(dela)})
+    score = sum(d["puntos"] for d in desglose)
+    verdict = next(v for umbral, v in UMBRALES if score >= umbral)
 
     domains, ips, hashes = [], [], []
     for u in urls:
@@ -698,7 +804,7 @@ def analyze(raw_bytes: bytes, filename: str = None) -> dict:
         "meta": {"filename": filename, "sizeBytes": len(raw_bytes),
                  "analyzedAt": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                  "engine": f"PhishTriage CLI {VERSION}"},
-        "score": score, "verdict": verdict,
+        "score": score, "verdict": verdict, "scoreBreakdown": desglose,
         "summary": {
             "from": frm[0]["address"] if frm else None,
             "fromDisplay": frm[0]["name"] if frm else None,
@@ -866,7 +972,7 @@ def render_text(r, c: C, show_headers=False):
             return c.dim("n/d")
         return c.grn(v) if v == "pass" else c.red(v) if v in ("fail", "softfail") else c.yel(v)
     L.append("")
-    L.append(c.bld(" Autenticacion"))
+    L.append(c.bld(" Autenticación"))
     L.append(f"   SPF   {auth_c(a['spf']):<22} smtp.mailfrom={a['spfDomain'] or 'n/d'}  "
              f"alineado={a['alignment']['spf']}")
     L.append(f"   DKIM  {auth_c(a['dkim']):<22} header.d={a['dkimDomain'] or 'n/d'}  "
@@ -876,6 +982,14 @@ def render_text(r, c: C, show_headers=False):
         L.append(f"   compauth={a['compauth']}   ARC seals={a['arcSeals']}")
     for sig in a["dkimSignatures"]:
         L.append(c.dim(f"   firma DKIM d={sig['d']} s={sig['s']} a={sig['a']}"))
+
+    L.append("")
+    L.append(c.bld(" Cómo se reparte la nota"))
+    for d in r["scoreBreakdown"]:
+        barra = "#" * d["puntos"] + "." * (d["techo"] - d["puntos"])
+        extra = c.dim(f"  (bruto {d['bruto']}, {d['reglas']} reglas)") if d["bruto"] else ""
+        L.append(f"   {d['nombre']:<24} {d['puntos']:>2}/{d['techo']:<2} {barra}{extra}")
+    L.append(f"   {'TOTAL':<24} {r['score']:>2}/100")
 
     L.append("")
     L.append(c.bld(f" Hallazgos ({len(r['findings'])})"))
@@ -1015,7 +1129,7 @@ def render_markdown(r):
     L += ["```", ""]
     if r.get("enrichment"):
         L += ["## Enriquecimiento", "", "```json", json.dumps(r["enrichment"], indent=2, ensure_ascii=False), "```", ""]
-    L.append("_Generado por PhishTriage. Analisis heuristico: revisa siempre manualmente antes de actuar._")
+    L.append("_Generado por PhishTriage. Análisis heurístico: revisa siempre manualmente antes de actuar._")
     return "\n".join(L)
 
 
@@ -1033,9 +1147,9 @@ def main(argv=None):
     ap.add_argument("--json", metavar="RUTA", help="escribe JSON (fichero, o directorio si hay varios)")
     ap.add_argument("--md", metavar="RUTA", help="escribe informe Markdown (fichero o directorio)")
     ap.add_argument("--enrich", action="store_true", help="consulta VirusTotal y AbuseIPDB")
-    ap.add_argument("--max-items", type=int, default=10, help="maximo de IOCs por tipo a consultar (10)")
+    ap.add_argument("--max-items", type=int, default=10, help="máximo de IOCs por tipo a consultar (10)")
     ap.add_argument("--delay", type=float, default=15.0,
-                    help="segundos entre peticiones a la API (15 = limite publico de VT)")
+                    help="segundos entre peticiones a la API (15 = limite público de VT)")
     ap.add_argument("--headers", action="store_true", help="vuelca todas las cabeceras")
     ap.add_argument("--quiet", action="store_true", help="no imprime el informe de texto")
     ap.add_argument("--no-color", action="store_true", help="sin colores ANSI")

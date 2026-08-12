@@ -3,7 +3,7 @@
 Analizador de correos `.eml`. Traga un fichero y escupe el informe que normalmente
 haces a mano: cabeceras parseadas, resultados de SPF/DKIM/DMARC con su alineamiento,
 cadena de `Received` salto a salto, URLs extraídas y defanged, adjuntos con sus hashes,
-y enriquecimiento opcional contra VirusTotal y AbuseIPDB.
+y enriquecimiento opcional contra VirusTotal y AbuseIPDB desde el CLI.
 
 Dos frontales sobre la misma lógica:
 
@@ -30,11 +30,39 @@ Dos frontales sobre la misma lógica:
 | URLs | De HTML (`a`, `img`, `form`, `background`, `meta refresh`) y de texto plano; desajuste texto/href, IP directa, `@` en la autoridad, acortadores, puertos raros, palabras de robo de credenciales |
 | Adjuntos | Nombre, MIME, tamaño, MD5 / SHA-1 / SHA-256, *magic bytes*, extensión ejecutable, doble extensión, macros de Office, RTLO, discordancia tipo/extensión |
 | Cuerpo | `<form>`, campos `password`, `<script>`, `iframe`, `meta refresh`, texto invisible, correo solo-imagen |
-| Score | Suma ponderada de indicios, tope 100: BAJO &lt;20, MEDIO 20-49, ALTO 50-79, CRÍTICO &ge;80 |
+| Score | Ponderación por categorías con techo (ver abajo): BAJO &lt;20, MEDIO 20-49, ALTO 50-79, CRÍTICO &ge;80 |
 | Salidas | JSON completo, informe Markdown, lista de IOCs defanged, CSV de IOCs |
 
 Los indicios no son un veredicto. El score sirve para priorizar la cola, no para
 bloquear un dominio sin mirarlo.
+
+### Cómo se pondera
+
+Toda la ponderación vive en dos tablas al principio de `assets/eml.js` (`CATEGORIAS` y
+`PESOS`), espejadas en `cli/phishtriage.py`. Para cambiar cuánto pesa algo, cambias un
+número de la tabla y ya: no hay puntos sueltos por el código.
+
+| Categoría | Techo |
+|---|---|
+| Autenticación (SPF/DKIM/DMARC y alineamiento) | 30 |
+| Identidad del remitente | 20 |
+| Enlaces | 20 |
+| Adjuntos | 15 |
+| Contenido del mensaje | 10 |
+| Transporte y cabeceras | 5 |
+
+Cada regla suma dentro de su categoría y **cada categoría tiene un techo**. Los techos
+suman 100, así que la nota es una composición real: un correo solo se acerca a 100 si
+falla en varios frentes a la vez, no por acumular quince pegas del mismo tipo. Antes se
+sumaba todo a un único cubo y el 79 % de los puntos del correo de ejemplo no cambiaban
+nada, porque ya estaba saturado con cinco reglas.
+
+El informe incluye el desglose (`scoreBreakdown`): la pestaña **Hallazgos** lo pinta y el
+CLI lo imprime en barras, con los puntos brutos al lado para que se vea cuánto ha
+recortado el techo.
+
+Los tests comprueban que las dos tablas no diverjan, que los techos sigan sumando 100 y
+que las dos implementaciones disparen exactamente las mismas reglas sobre el mismo correo.
 
 ---
 
@@ -76,10 +104,11 @@ python3 cli/phishtriage.py "$1" --quiet --json out/ || echo "revisar a mano"
 
 ## Enriquecimiento (VirusTotal + AbuseIPDB)
 
-Consulta hashes de adjuntos, dominios, URLs e IPs. **En el repositorio no hay ninguna
-clave**, y no debe haberla nunca.
-
-### CLI
+Solo en el CLI, y a propósito. Ni VirusTotal ni AbuseIPDB envían cabeceras CORS, así que
+desde el navegador la petición muere antes de salir; y meter una clave de API en una
+página pública es regalarla. La web resuelve esto por otro camino: la pestaña
+**¿Qué hago?** enlaza a la ficha pública de cada hash, dominio e IP, que no necesita clave
+ni registro.
 
 ```bash
 export VT_API_KEY=...
@@ -87,57 +116,14 @@ export ABUSEIPDB_API_KEY=...
 python3 cli/phishtriage.py correo.eml --enrich --delay 15
 ```
 
-O copia `cli/.env.example` a `cli/.env` (ignorado por git). `--delay 15` respeta el
-límite de 4 peticiones/minuto de la API pública de VirusTotal; con clave de pago bájalo.
+O copia `cli/.env.example` a `cli/.env` (ignorado por git). `--delay 15` respeta el límite
+de 4 peticiones/minuto de la API pública de VirusTotal; con clave de pago bájalo.
 
-### Web
+En el repositorio no hay ninguna clave, y no debe haberla nunca: el CI falla si aparece
+algo que lo parezca.
 
-**Desde el navegador, contra la API pública, no funciona y no puede funcionar.** Ni
-VirusTotal ni AbuseIPDB envían cabeceras CORS, así que el navegador aborta la petición
-antes de que salga del equipo. Si ves `Peticion bloqueada (CORS o red)`, tu clave está
-bien; el problema es de sus APIs. Además, meter una clave en una página pública es
-regalarla. Solución: un proxy en tu propia máquina.
-
-```bash
-export VT_API_KEY=... ABUSEIPDB_API_KEY=...
-python3 cli/proxy.py                     # http://127.0.0.1:8787
-```
-
-Y en la web, **Ajustes → Proxy** → `http://127.0.0.1:8787`. Las claves se quedan en el
-entorno del proxy; el navegador nunca las ve.
-
-Importante: **sirve la app en local para esto**, no la abras desde GitHub Pages. Una página
-HTTPS no puede hablar con un `http://127.0.0.1` (contenido mixto; Firefox lo bloquea sin
-excepciones). El flujo completo, en dos terminales:
-
-```bash
-# terminal 1 - el proxy con tu clave
-cp cli/.env.example cli/.env     # y escribe dentro VT_API_KEY / ABUSEIPDB_API_KEY
-python3 cli/proxy.py
-
-# terminal 2 - la web
-python3 -m http.server 8000
-# abre http://127.0.0.1:8000 -> Ajustes -> Proxy: http://127.0.0.1:8787
-```
-
-Si quieres enriquecer desde la web pública tendrías que poner el proxy detrás de HTTPS
-(por ejemplo un Cloudflare Worker con la clave como secreto) y arrancarlo con
-`--allow-origin https://kharonte09.github.io`.
-
-Para trastear en local sin tocar el panel cada vez:
-
-```bash
-cp assets/config.example.js assets/config.local.js
-# edítalo: proxyBase, o claves si estás en 127.0.0.1
-```
-
-`assets/config.local.js` está en `.gitignore`. Es el fichero de *pre*: nunca se sube.
-Si aun así prefieres pegar tu clave en el panel de Ajustes, se guarda solo en el
-`localStorage` de ese navegador — asume que es una clave quemable, personal y de solo
-lectura, jamás la corporativa.
-
-Y ojo con el enriquecimiento en un incidente real: consultar una URL en VirusTotal la
-hace visible a terceros y puede avisar al atacante de que le has detectado.
+Y ojo con el enriquecimiento en un incidente real: consultar una URL en VirusTotal la hace
+visible a terceros y puede avisar al atacante de que le has detectado.
 
 ---
 
@@ -163,19 +149,18 @@ Requisito: el repositorio debe ser público (Pages en repos privados es de plan 
 phishtriage/
 ├── index.html                 interfaz
 ├── assets/
-│   ├── eml.js                 motor: MIME, cabeceras, auth, URLs, hashes, scoring
-│   ├── enrich.js              cliente VT/AbuseIPDB y resolución de configuración
+│   ├── eml.js                 motor: MIME, cabeceras, auth, URLs, hashes, ponderación
 │   ├── app.js                 render y eventos
-│   ├── styles.css
-│   └── config.example.js      plantilla -> config.local.js (gitignored)
+│   └── styles.css
 ├── cli/
 │   ├── phishtriage.py         CLI, misma lógica, sin dependencias
-│   ├── proxy.py               proxy local para no exponer las claves
 │   └── .env.example
 ├── samples/
 │   ├── sample-phishing.eml    correo de phishing sintético (inofensivo)
 │   └── make_sample.py         lo regenera
-├── tests/run-tests.mjs        40 comprobaciones + paridad JS vs Python
+├── tests/
+│   ├── run-tests.mjs          46 comprobaciones + paridad JS vs Python
+│   └── ui-test.mjs            30 comprobaciones de interfaz con jsdom
 └── .github/workflows/ci.yml
 ```
 
@@ -187,8 +172,9 @@ node tests/run-tests.mjs
 
 Comprueba las utilidades (dominio organizativo, defang, MD5, RFC 2047), los indicios que
 debe detectar en el correo de ejemplo, que un correo inocuo sale BAJO, y que el CLI de
-Python y el motor JS dan el **mismo score, los mismos hashes y el mismo número de
-hallazgos**. Si tocas una heurística, tócala en los dos sitios o el test te lo dirá.
+Python y el motor JS **disparan exactamente las mismas reglas, con el mismo desglose por
+categoría y los mismos hashes**. Además compara las dos tablas de ponderación y falla si
+divergen. Si tocas una heurística, tócala en los dos sitios o el test te lo dirá.
 
 ## Límites conocidos
 

@@ -1,5 +1,4 @@
-# Configuracion local con claves de API: NUNCA se sube
-assets/config.local.js
+# Claves de API: NUNCA se suben
 cli/.env
 .env
 
@@ -9,8 +8,8 @@ cli/.env
 *.msg
 out/
 informes/
-*.json
-!package.json
+out/*.json
+informes/*.json
 *.md.bak
 
 # Basura del sistema

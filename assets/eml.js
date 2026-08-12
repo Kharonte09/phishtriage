@@ -1,5 +1,5 @@
 /*!
- * PhishTriage - motor de analisis de .eml 100% client-side
+ * PhishTriage - motor de análisis de .eml 100% client-side
  * Sin dependencias. Funciona en navegador y en Node (para los tests).
  * Licencia MIT.
  */
@@ -370,7 +370,7 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Autenticacion
+  // Autenticación
   // ---------------------------------------------------------------------------
 
   function parseAuthResults(headers) {
@@ -444,7 +444,7 @@
         ips, publicIPs: ips.filter(ip => !isPrivateIP(ip))
       };
     });
-    // Received se apila hacia arriba: el ultimo del array es el primer salto real
+    // Received se apila hacia arriba: el último del array es el primer salto real
     const chrono = hops.slice().reverse();
     for (let i = 0; i < chrono.length; i++) {
       const prev = chrono[i - 1];
@@ -550,8 +550,8 @@
       if (/(^|\.)xn--/i.test(host)) flags.push({ id: 'url-punycode', sev: 'high', msg: 'Dominio punycode (posible homoglifo IDN)' });
       if (p.userinfo) flags.push({ id: 'url-userinfo', sev: 'high', msg: 'Autoridad con "@" (' + p.userinfo + '@): oculta el host real' });
       if (SHORTENERS.has(od)) flags.push({ id: 'url-shortener', sev: 'medium', msg: 'Acortador de URL: destino oculto' });
-      if (REDIRECT_HOSTS.some(r => r.test(host))) flags.push({ id: 'url-redirector', sev: 'info', msg: 'Host de redireccion/tracking' });
-      if (p.port && p.port !== '80' && p.port !== '443') flags.push({ id: 'url-port', sev: 'medium', msg: 'Puerto no estandar: ' + p.port });
+      if (REDIRECT_HOSTS.some(r => r.test(host))) flags.push({ id: 'url-redirector', sev: 'info', msg: 'Host de redirección/tracking' });
+      if (p.port && p.port !== '80' && p.port !== '443') flags.push({ id: 'url-port', sev: 'medium', msg: 'Puerto no estándar: ' + p.port });
       if (RISKY_TLD.has(tld)) flags.push({ id: 'url-tld', sev: 'medium', msg: 'TLD de alto abuso: .' + tld });
       if (CRED_WORDS.test(p.path)) flags.push({ id: 'url-creds', sev: 'medium', msg: 'Ruta con palabras de robo de credenciales' });
       if (p.scheme === 'http' && CRED_WORDS.test(p.path)) flags.push({ id: 'url-http', sev: 'medium', msg: 'Formulario sensible sobre HTTP sin cifrar' });
@@ -647,14 +647,14 @@
       const ext = extOf(name);
       const magic = magicOf(bytes);
       const flags = [];
-      if (EXEC_EXT.has(ext)) flags.push({ id: 'att-exec', sev: 'high', msg: 'Extension ejecutable/script: .' + ext });
+      if (EXEC_EXT.has(ext)) flags.push({ id: 'att-exec', sev: 'high', msg: 'Extensión ejecutable/script: .' + ext });
       if (MACRO_EXT.has(ext)) flags.push({ id: 'att-macro', sev: 'high', msg: 'Office con macros habilitadas: .' + ext });
       if (CONTAINER_EXT.has(ext)) flags.push({ id: 'att-container', sev: 'medium', msg: 'Contenedor (.' + ext + '): puede ocultar el payload' });
       if (HTML_EXT.has(ext)) flags.push({ id: 'att-html', sev: 'high', msg: 'Adjunto HTML/SVG: tipico de phishing local (smuggling)' });
-      if (/\.[a-z0-9]{2,4}\s*\.[a-z0-9]{2,4}$/i.test(name)) flags.push({ id: 'att-double', sev: 'high', msg: 'Doble extension en el nombre' });
+      if (/\.[a-z0-9]{2,4}\s*\.[a-z0-9]{2,4}$/i.test(name)) flags.push({ id: 'att-double', sev: 'high', msg: 'Doble extensión en el nombre' });
       if (/[‪-‮⁦-⁩]/.test(name)) flags.push({ id: 'att-rtlo', sev: 'high', msg: 'Caracteres de control bidireccional (RTLO) en el nombre' });
-      if (magic === 'PE/DOS ejecutable (MZ)' && !EXEC_EXT.has(ext)) flags.push({ id: 'att-mismatch', sev: 'high', msg: 'Cabecera MZ pero extension .' + ext + ': tipo declarado falso' });
-      if (magic === 'OLE2 (Office 97-2003)' && ['doc', 'xls', 'ppt'].indexOf(ext) < 0) flags.push({ id: 'att-ole', sev: 'medium', msg: 'Contenedor OLE2 con extension .' + ext });
+      if (magic === 'PE/DOS ejecutable (MZ)' && !EXEC_EXT.has(ext)) flags.push({ id: 'att-mismatch', sev: 'high', msg: 'Cabecera MZ pero extensión .' + ext + ': tipo declarado falso' });
+      if (magic === 'OLE2 (Office 97-2003)' && ['doc', 'xls', 'ppt'].indexOf(ext) < 0) flags.push({ id: 'att-ole', sev: 'medium', msg: 'Contenedor OLE2 con extensión .' + ext });
       if (bytes.length === 0) flags.push({ id: 'att-empty', sev: 'info', msg: 'Adjunto vacio' });
       list.push({
         filename: name, mime: n.mime, declaredEncoding: n.encoding, disposition: n.disposition,
@@ -666,17 +666,123 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Analisis principal
+  // PONDERACION
+  // Todo lo que decide la nota esta aquí y en ningún otro sitio: si quieres que
+  // algo pese mas o menos, cambia el número de esta tabla y ya.
+  //
+  // Cada regla suma sus puntos dentro de su categoría, y cada categoría tiene un
+  // techo. Los techos suman 100, así que la nota final es una composicion real:
+  // un correo solo se acerca a 100 si falla en varios frentes a la vez, no por
+  // acumular quince pegas del mismo tipo.
+  // ---------------------------------------------------------------------------
+  const CATEGORIAS = {
+    auth:       { techo: 30, nombre: 'Autenticación' },
+    identidad:  { techo: 20, nombre: 'Identidad del remitente' },
+    enlaces:    { techo: 20, nombre: 'Enlaces' },
+    adjuntos:   { techo: 15, nombre: 'Adjuntos' },
+    contenido:  { techo: 10, nombre: 'Contenido del mensaje' },
+    transporte: { techo: 5, nombre: 'Transporte y cabeceras' }
+  };
+
+  const PESOS = {
+    // --- Autenticación (techo 30) --------------------------------------------
+    'spf-fail':        { cat: 'auth', pts: 25, sev: 'high' },
+    'spf-softfail':    { cat: 'auth', pts: 12, sev: 'medium' },
+    'spf-none':        { cat: 'auth', pts: 8, sev: 'medium' },
+    'spf-neutral':     { cat: 'auth', pts: 8, sev: 'medium' },
+    'dkim-fail':       { cat: 'auth', pts: 20, sev: 'high' },
+    'dkim-none':       { cat: 'auth', pts: 8, sev: 'medium' },
+    'dkim-absent':     { cat: 'auth', pts: 8, sev: 'medium' },
+    'dmarc-fail':      { cat: 'auth', pts: 30, sev: 'high' },
+    'dmarc-none':      { cat: 'auth', pts: 10, sev: 'medium' },
+    'dmarc-absent':    { cat: 'auth', pts: 10, sev: 'medium' },
+    'compauth':        { cat: 'auth', pts: 10, sev: 'medium' },
+    'align-none':      { cat: 'auth', pts: 20, sev: 'high' },
+    'align-dkim':      { cat: 'auth', pts: 10, sev: 'medium' },
+    'no-transport':    { cat: 'auth', pts: 0, sev: 'info' },
+
+    // --- Identidad del remitente (techo 20) ----------------------------------
+    'rp-mismatch':     { cat: 'identidad', pts: 15, sev: 'high' },
+    'replyto-mismatch':{ cat: 'identidad', pts: 18, sev: 'high' },
+    'dn-email':        { cat: 'identidad', pts: 22, sev: 'high' },
+    'dn-brand':        { cat: 'identidad', pts: 18, sev: 'high' },
+    'dn-homoglyph':    { cat: 'identidad', pts: 12, sev: 'medium' },
+    'from-punycode':   { cat: 'identidad', pts: 20, sev: 'high' },
+    'from-tld':        { cat: 'identidad', pts: 10, sev: 'medium' },
+    'from-multi':      { cat: 'identidad', pts: 10, sev: 'medium' },
+    'from-missing':    { cat: 'identidad', pts: 10, sev: 'medium' },
+    'mid-missing':     { cat: 'identidad', pts: 10, sev: 'medium' },
+    'mid-mismatch':    { cat: 'identidad', pts: 6, sev: 'low' },
+
+    // --- Enlaces (techo 20) ---------------------------------------------------
+    'url-mismatch':    { cat: 'enlaces', pts: 20, sev: 'high' },
+    'url-ip':          { cat: 'enlaces', pts: 20, sev: 'high' },
+    'url-punycode':    { cat: 'enlaces', pts: 20, sev: 'high' },
+    'url-userinfo':    { cat: 'enlaces', pts: 20, sev: 'high' },
+    'url-data':        { cat: 'enlaces', pts: 25, sev: 'high' },
+    'url-brand':       { cat: 'enlaces', pts: 18, sev: 'high' },
+    'url-shortener':   { cat: 'enlaces', pts: 10, sev: 'medium' },
+    'url-creds':       { cat: 'enlaces', pts: 10, sev: 'medium' },
+    'url-tld':         { cat: 'enlaces', pts: 8, sev: 'medium' },
+    'url-port':        { cat: 'enlaces', pts: 8, sev: 'medium' },
+    'url-http':        { cat: 'enlaces', pts: 6, sev: 'medium' },
+    'url-subdomains':  { cat: 'enlaces', pts: 4, sev: 'low' },
+    'url-redirector':  { cat: 'enlaces', pts: 0, sev: 'info' },
+
+    // --- Adjuntos (techo 15) --------------------------------------------------
+    'att-exec':        { cat: 'adjuntos', pts: 25, sev: 'high' },
+    'att-double':      { cat: 'adjuntos', pts: 22, sev: 'high' },
+    'att-rtlo':        { cat: 'adjuntos', pts: 22, sev: 'high' },
+    'att-macro':       { cat: 'adjuntos', pts: 20, sev: 'high' },
+    'att-html':        { cat: 'adjuntos', pts: 20, sev: 'high' },
+    'att-mismatch':    { cat: 'adjuntos', pts: 20, sev: 'high' },
+    'att-ole':         { cat: 'adjuntos', pts: 10, sev: 'medium' },
+    'att-container':   { cat: 'adjuntos', pts: 8, sev: 'medium' },
+    'att-empty':       { cat: 'adjuntos', pts: 0, sev: 'info' },
+
+    // --- Contenido del mensaje (techo 10) -------------------------------------
+    'body-password':   { cat: 'contenido', pts: 25, sev: 'high' },
+    'body-form':       { cat: 'contenido', pts: 20, sev: 'high' },
+    'body-script':     { cat: 'contenido', pts: 18, sev: 'high' },
+    'body-refresh':    { cat: 'contenido', pts: 18, sev: 'high' },
+    'body-bec':        { cat: 'contenido', pts: 15, sev: 'high' },
+    'body-iframe':     { cat: 'contenido', pts: 12, sev: 'medium' },
+    'body-image':      { cat: 'contenido', pts: 12, sev: 'medium' },
+    'body-hidden':     { cat: 'contenido', pts: 10, sev: 'medium' },
+    'body-crypto':     { cat: 'contenido', pts: 10, sev: 'medium' },
+    'body-empty':      { cat: 'contenido', pts: 8, sev: 'medium' },
+    'body-entities':   { cat: 'contenido', pts: 6, sev: 'low' },
+    'subj-urgency':    { cat: 'contenido', pts: 8, sev: 'medium' },
+    'subj-nothread':   { cat: 'contenido', pts: 8, sev: 'medium' },
+    'subj-fakereply':  { cat: 'contenido', pts: 5, sev: 'low' },
+
+    // --- Transporte y cabeceras (techo 5) -------------------------------------
+    'xmailer':         { cat: 'transporte', pts: 10, sev: 'medium' },
+    'rcv-none':        { cat: 'transporte', pts: 10, sev: 'medium' },
+    'rcv-one':         { cat: 'transporte', pts: 5, sev: 'low' },
+    'rcv-delay':       { cat: 'transporte', pts: 4, sev: 'low' },
+    'date-skew':       { cat: 'transporte', pts: 5, sev: 'low' },
+    'x-orig-ip':       { cat: 'transporte', pts: 0, sev: 'info' }
+  };
+
+  // Umbrales del veredicto
+  const UMBRALES = [[80, 'CRITICO'], [50, 'ALTO'], [20, 'MEDIO'], [0, 'BAJO']];
+
+  // ---------------------------------------------------------------------------
+  // Análisis principal
   // ---------------------------------------------------------------------------
 
-  const URGENCY = /(urgente|inmediat|caduca|expira|vence|suspend|bloquea|bloqueo|verifica|verificar|confirma|ultimo aviso|último aviso|accion requerida|acción requerida|24 horas|48 horas|reembolso|factura|impag|multa|sancion|sanción|premio|herencia|urgent|immediate|expires?|suspended|verify|confirm|action required|final notice|password|invoice|payment|overdue|refund|wire|gift card)/i;
+  const URGENCY = /(urgente|inmediat|caduca|expira|vence|suspend|bloquea|bloqueo|último aviso|último aviso|accion requerida|acción requerida|24 horas|48 horas|impag|multa|sanción|sanción|premio|herencia|urgent|immediate|expires?|suspended|action required|final notice|overdue|last warning)/i;
 
   async function analyze(rawLatin1, meta) {
     meta = meta || {};
     const root = parseNode(rawLatin1, 0);
     const H = root.headers;
     const findings = [];
-    const push = (sev, points, id, msg) => findings.push({ sev, points, id, msg });
+    const push = (id, msg) => {
+      const p = PESOS[id] || { cat: 'contenido', pts: 0, sev: 'info' };
+      findings.push({ id, msg, cat: p.cat, sev: p.sev, points: p.pts });
+    };
 
     // --- Identidades
     const from = parseAddressList(headerGet(H, 'from'));
@@ -707,29 +813,29 @@
     const attachments = await collectAttachments(root);
 
     // Un .eml reconstruido o exportado a mano no conserva cabeceras de transporte:
-    // en ese caso su ausencia no es un indicio, solo una limitacion del analisis.
+    // en ese caso su ausencia no es un indicio, solo una limitacion del análisis.
     const noTransport = auth.raw.length === 0 && hops.length === 0;
     if (noTransport) {
-      push('info', 0, 'no-transport', 'El fichero no conserva cabeceras de transporte (Received/Authentication-Results): analisis limitado al contenido');
+      push('no-transport', 'El fichero no conserva cabeceras de transporte (Received/Authentication-Results): análisis limitado al contenido');
     }
 
-    // --- Reglas de autenticacion
+    // --- Reglas de autenticación
     const S = (v) => (v || '').toLowerCase();
-    if (S(auth.spf) === 'fail') push('high', 25, 'spf-fail', 'SPF fail: el servidor emisor no esta autorizado por el dominio del sobre');
-    else if (S(auth.spf) === 'softfail') push('medium', 12, 'spf-softfail', 'SPF softfail');
-    else if (!auth.spf) { if (!noTransport) push('medium', 8, 'spf-none', 'Sin resultado SPF en las cabeceras'); }
-    else if (S(auth.spf) === 'none' || S(auth.spf) === 'neutral') push('medium', 8, 'spf-neutral', 'SPF ' + auth.spf + ': el dominio no publica politica utilizable');
+    if (S(auth.spf) === 'fail') push('spf-fail', 'SPF fail: el servidor emisor no está autorizado por el dominio del sobre');
+    else if (S(auth.spf) === 'softfail') push('spf-softfail', 'SPF softfail');
+    else if (!auth.spf) { if (!noTransport) push('spf-none', 'Sin resultado SPF en las cabeceras'); }
+    else if (S(auth.spf) === 'none' || S(auth.spf) === 'neutral') push('spf-neutral', 'SPF ' + auth.spf + ': el dominio no pública política utilizable');
 
-    if (S(auth.dkim) === 'fail') push('high', 20, 'dkim-fail', 'DKIM fail: la firma no valida (contenido alterado o firma falsa)');
-    else if (!auth.dkim) { if (!noTransport) push('medium', 8, 'dkim-none', 'Sin resultado DKIM en las cabeceras'); }
-    else if (S(auth.dkim) === 'none') push('medium', 8, 'dkim-absent', 'DKIM none: el mensaje no viene firmado');
+    if (S(auth.dkim) === 'fail') push('dkim-fail', 'DKIM fail: la firma no valida (contenido alterado o firma falsa)');
+    else if (!auth.dkim) { if (!noTransport) push('dkim-none', 'Sin resultado DKIM en las cabeceras'); }
+    else if (S(auth.dkim) === 'none') push('dkim-absent', 'DKIM none: el mensaje no viene firmado');
 
-    if (S(auth.dmarc) === 'fail') push('high', 30, 'dmarc-fail', 'DMARC fail: no hay alineamiento con el dominio del From');
-    else if (!auth.dmarc) { if (!noTransport) push('medium', 10, 'dmarc-none', 'Sin resultado DMARC en las cabeceras'); }
-    else if (S(auth.dmarc) === 'none') push('medium', 10, 'dmarc-absent', 'DMARC none: dominio sin politica DMARC');
+    if (S(auth.dmarc) === 'fail') push('dmarc-fail', 'DMARC fail: no hay alineamiento con el dominio del From');
+    else if (!auth.dmarc) { if (!noTransport) push('dmarc-none', 'Sin resultado DMARC en las cabeceras'); }
+    else if (S(auth.dmarc) === 'none') push('dmarc-absent', 'DMARC none: dominio sin política DMARC');
 
     if (auth.compauth && ['fail', 'softpass', 'none'].indexOf(S(auth.compauth)) >= 0) {
-      push('medium', 10, 'compauth', 'compauth=' + auth.compauth + ' (Microsoft marca autenticacion compuesta debil)');
+      push('compauth', 'compauth=' + auth.compauth + ' (Microsoft marca autenticación compuesta debil)');
     }
 
     // Alineamiento manual
@@ -737,68 +843,68 @@
     if (fromOrg && auth.spfDomain) alignment.spf = orgDomain(auth.spfDomain) === fromOrg;
     if (fromOrg && auth.dkimDomain) alignment.dkim = orgDomain(auth.dkimDomain) === fromOrg;
     if (alignment.spf === false && alignment.dkim !== true) {
-      push('high', 20, 'align-none', 'Ningun identificador alinea con el From (' + fromOrg + '): SPF=' +
+      push('align-none', 'Ningún identificador alinea con el From (' + fromOrg + '): SPF=' +
         (auth.spfDomain || 'n/d') + ', DKIM=' + (auth.dkimDomain || 'sin firma'));
     } else if (alignment.dkim === false && auth.dkimDomain) {
-      push('medium', 10, 'align-dkim', 'DKIM firma como ' + auth.dkimDomain + ', no como ' + fromOrg);
+      push('align-dkim', 'DKIM firma como ' + auth.dkimDomain + ', no como ' + fromOrg);
     }
 
     // --- Reglas de identidad
     if (returnPath[0] && fromOrg && returnPath[0].orgDomain && returnPath[0].orgDomain !== fromOrg) {
-      push('high', 15, 'rp-mismatch', 'Return-Path (' + returnPath[0].orgDomain + ') distinto del From (' + fromOrg + ')');
+      push('rp-mismatch', 'Return-Path (' + returnPath[0].orgDomain + ') distinto del From (' + fromOrg + ')');
     }
     if (replyTo[0] && fromOrg && replyTo[0].orgDomain && replyTo[0].orgDomain !== fromOrg) {
-      push('high', 18, 'replyto-mismatch', 'Reply-To apunta a ' + replyTo[0].address + ', dominio ajeno al remitente');
+      push('replyto-mismatch', 'Reply-To apunta a ' + replyTo[0].address + ', dominio ajeno al remitente');
     }
     if (from[0]) {
       const dn = from[0].name || '';
       const emailInName = dn.match(/[\w.+-]+@[\w.-]+\.\w+/);
       if (emailInName && orgDomain(emailInName[0].split('@')[1]) !== fromOrg) {
-        push('high', 22, 'dn-email', 'El nombre visible contiene otra direccion (' + emailInName[0] + ') distinta de la real');
+        push('dn-email', 'El nombre visible contiene otra dirección (' + emailInName[0] + ') distinta de la real');
       }
       const dnNorm = dn.toLowerCase().replace(/[^a-z0-9]/g, '');
       const brand = BRANDS.find(b => dnNorm.includes(b));
       if (brand && fromOrg && !fromOrg.replace(/[^a-z0-9]/g, '').includes(brand)) {
-        push('high', 18, 'dn-brand', 'Nombre visible suplanta a "' + brand + '" desde el dominio ' + fromOrg);
+        push('dn-brand', 'Nombre visible suplanta a "' + brand + '" desde el dominio ' + fromOrg);
       }
       if (/[Ѐ-ӿͰ-ϿĀ-ſ]/.test(dn + (from[0].address || ''))) {
-        push('medium', 12, 'dn-homoglyph', 'Caracteres no latinos/acentuados en el remitente: posible homoglifo');
+        push('dn-homoglyph', 'Caracteres no latinos/acentuados en el remitente: posible homoglifo');
       }
-      if (/(^|\.)xn--/i.test(from[0].domain || '')) push('high', 20, 'from-punycode', 'Dominio del remitente en punycode: ' + from[0].domain);
+      if (/(^|\.)xn--/i.test(from[0].domain || '')) push('from-punycode', 'Dominio del remitente en punycode: ' + from[0].domain);
       if (RISKY_TLD.has((from[0].domain || '').split('.').pop())) {
-        push('medium', 10, 'from-tld', 'TLD de alto abuso en el remitente: .' + from[0].domain.split('.').pop());
+        push('from-tld', 'TLD de alto abuso en el remitente: .' + from[0].domain.split('.').pop());
       }
-      if (from.length > 1) push('medium', 10, 'from-multi', 'Multiples direcciones en From (' + from.length + '): tecnica de evasion');
+      if (from.length > 1) push('from-multi', 'Múltiples direcciones en From (' + from.length + '): técnica de evasión');
     } else {
-      push('medium', 10, 'from-missing', 'Sin cabecera From');
+      push('from-missing', 'Sin cabecera From');
     }
 
-    if (!messageId) { if (!noTransport) push('medium', 10, 'mid-missing', 'Sin Message-ID: generado por herramienta de envio masivo o script'); }
+    if (!messageId) { if (!noTransport) push('mid-missing', 'Sin Message-ID: generado por herramienta de envio masivo o script'); }
     else {
       const mdom = (messageId.match(/@([^>\s]+)>?\s*$/) || [])[1];
       if (mdom && fromOrg && orgDomain(mdom) !== fromOrg) {
-        push('low', 6, 'mid-mismatch', 'Dominio del Message-ID (' + orgDomain(mdom) + ') distinto del From');
+        push('mid-mismatch', 'Dominio del Message-ID (' + orgDomain(mdom) + ') distinto del From');
       }
     }
 
     const xMailer = headerGet(H, 'x-mailer') || headerGet(H, 'user-agent') || '';
     if (/phpmailer|sendmail|python|swiftmailer|mass|bulk|axigen|smtplib|mailer\s*script/i.test(xMailer)) {
-      push('medium', 10, 'xmailer', 'X-Mailer sospechoso: ' + xMailer.trim());
+      push('xmailer', 'X-Mailer sospechoso: ' + xMailer.trim());
     }
     if (headerGet(H, 'x-originating-ip')) {
-      push('info', 0, 'x-orig-ip', 'X-Originating-IP: ' + headerGet(H, 'x-originating-ip').replace(/[\[\]]/g, ''));
+      push('x-orig-ip', 'X-Originating-IP: ' + headerGet(H, 'x-originating-ip').replace(/[\[\]]/g, ''));
     }
 
     // --- Received
-    if (hops.length === 0) { if (!noTransport) push('medium', 10, 'rcv-none', 'Sin cabeceras Received: mensaje inyectado localmente o cabeceras eliminadas'); }
-    else if (hops.length === 1) push('low', 5, 'rcv-one', 'Un unico salto Received: entrega directa al MX');
+    if (hops.length === 0) { if (!noTransport) push('rcv-none', 'Sin cabeceras Received: mensaje inyectado localmente o cabeceras eliminadas'); }
+    else if (hops.length === 1) push('rcv-one', 'Un único salto Received: entrega directa al MX');
     const bigDelay = hops.find(h => h.delaySeconds !== null && h.delaySeconds > 3600);
-    if (bigDelay) push('low', 4, 'rcv-delay', 'Salto con ' + Math.round(bigDelay.delaySeconds / 60) + ' min de retardo (hop ' + bigDelay.hop + ')');
+    if (bigDelay) push('rcv-delay', 'Salto con ' + Math.round(bigDelay.delaySeconds / 60) + ' min de retardo (hop ' + bigDelay.hop + ')');
     if (dateHdr && hops.length) {
       const first = hops.find(h => h.ts);
       const dts = Date.parse(dateHdr.replace(/\s*\([^)]*\)\s*$/, ''));
       if (first && !isNaN(dts) && Math.abs(first.ts - dts) > 48 * 3600 * 1000) {
-        push('low', 5, 'date-skew', 'Date difiere mas de 48 h del primer Received: cabecera falsificada');
+        push('date-skew', 'Date difiere más de 48 h del primer Received: cabecera falsificada');
       }
     }
     const originIP = (() => {
@@ -807,58 +913,60 @@
     })();
 
     // --- Asunto / cuerpo
-    if (URGENCY.test(subject)) push('medium', 8, 'subj-urgency', 'Asunto con lenguaje de urgencia/presion');
+    if (URGENCY.test(subject)) push('subj-urgency', 'Asunto con lenguaje de urgencia/presión');
     if (/^\s*(re|fw|fwd|rv)\s*:/i.test(subject) && hops.length <= 1) {
-      push('low', 5, 'subj-fakereply', 'Asunto tipo respuesta ("Re:") sin cabeceras de hilo (In-Reply-To/References ausentes)');
+      push('subj-fakereply', 'Asunto tipo respuesta ("Re:") sin cabeceras de hilo (In-Reply-To/References ausentes)');
     }
     if (/^\s*(re|fw|fwd|rv)\s*:/i.test(subject) && !headerGet(H, 'in-reply-to') && !headerGet(H, 'references')) {
-      push('medium', 8, 'subj-nothread', 'Simula responder a un hilo pero no hay In-Reply-To ni References');
+      push('subj-nothread', 'Simula responder a un hilo pero no hay In-Reply-To ni References');
     }
     if (html) {
-      if (/<form\b/i.test(html)) push('high', 20, 'body-form', 'Formulario HTML embebido en el correo (captura de credenciales)');
-      if (/type\s*=\s*["']?password/i.test(html)) push('high', 25, 'body-password', 'Campo de contrasena en el HTML del correo');
-      if (/<script\b/i.test(html)) push('high', 18, 'body-script', 'Etiqueta <script> en el cuerpo');
-      if (/<iframe\b/i.test(html)) push('medium', 12, 'body-iframe', 'iframe embebido');
-      if (/http-equiv\s*=\s*["']?refresh/i.test(html)) push('high', 18, 'body-refresh', 'meta refresh: redireccion automatica');
+      if (/<form\b/i.test(html)) push('body-form', 'Formulario HTML embebido en el correo (captura de credenciales)');
+      if (/type\s*=\s*["']?password/i.test(html)) push('body-password', 'Campo de contraseña en el HTML del correo');
+      if (/<script\b/i.test(html)) push('body-script', 'Etiqueta <script> en el cuerpo');
+      if (/<iframe\b/i.test(html)) push('body-iframe', 'iframe embebido');
+      if (/http-equiv\s*=\s*["']?refresh/i.test(html)) push('body-refresh', 'meta refresh: redirección automatica');
       const invisible = html.match(/(font-size\s*:\s*0|display\s*:\s*none|visibility\s*:\s*hidden|color\s*:\s*#?f{3,6}\b)/gi);
-      if (invisible && invisible.length >= 2) push('medium', 10, 'body-hidden', 'Texto oculto/invisible (' + invisible.length + ' ocurrencias): evasion de filtros');
+      if (invisible && invisible.length >= 2) push('body-hidden', 'Texto oculto/invisible (' + invisible.length + ' ocurrencias): evasión de filtros');
       const textLen = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().length;
       const imgs = (html.match(/<img\b/gi) || []).length;
-      if (imgs > 0 && textLen < 120) push('medium', 12, 'body-image', 'Correo casi solo imagen (' + imgs + ' img, ' + textLen + ' chars): evasion de analisis textual');
+      if (imgs > 0 && textLen < 120) push('body-image', 'Correo casi solo imagen (' + imgs + ' img, ' + textLen + ' chars): evasión de análisis textual');
       if (/&#x?[0-9a-f]{2,};/i.test(html) && (html.match(/&#x?[0-9a-f]{2,};/gi) || []).length > 40) {
-        push('low', 6, 'body-entities', 'Uso masivo de entidades HTML: ofuscacion');
+        push('body-entities', 'Uso masivo de entidades HTML: ofuscacion');
       }
     }
-    if (!html && !plain && attachments.length) push('medium', 8, 'body-empty', 'Cuerpo vacio con adjunto: patron de malware/spear-phishing');
+    if (!html && !plain && attachments.length) push('body-empty', 'Cuerpo vacio con adjunto: patron de malware/spear-phishing');
     if (/(bitcoin|btc|usdt|ethereum|monero|wallet|seed phrase|frase semilla|criptomoneda)/i.test(plain + ' ' + subject)) {
-      push('medium', 10, 'body-crypto', 'Referencias a criptomonedas (extorsion o fraude de inversion)');
+      push('body-crypto', 'Referencias a criptomonedas (extorsión o fraude de inversión)');
     }
     if (/(transferencia|wire transfer|iban|swift|cambio de cuenta|bank details|datos bancarios|nomina|payroll)/i.test(plain + ' ' + subject) && (replyTo.length || alignment.dkim === false)) {
-      push('high', 15, 'body-bec', 'Patron BEC: instrucciones de pago/datos bancarios con remitente no alineado');
+      push('body-bec', 'Patron BEC: instrucciones de pago/datos bancarios con remitente no alineado');
     }
 
     // --- Puntos de URLs y adjuntos
-    const SEV_POINTS = { high: 20, medium: 10, low: 4, info: 0 };
     const seenUrlFlags = new Set();
     for (const u of urls) {
       for (const f of u.flags) {
         const key = f.id + '|' + u.host;
         if (seenUrlFlags.has(key)) continue;
         seenUrlFlags.add(key);
-        push(f.sev, SEV_POINTS[f.sev] || 0, 'url:' + f.id, f.msg + ' -> ' + defang(u.url).slice(0, 160));
+        push(f.id, f.msg + ' -> ' + defang(u.url).slice(0, 160));
       }
     }
     for (const a of attachments) {
-      for (const f of a.flags) push(f.sev, SEV_POINTS[f.sev] || 0, 'att:' + f.id, f.msg + ' [' + a.filename + ']');
+      for (const f of a.flags) push(f.id, f.msg + ' [' + a.filename + ']');
     }
 
-    // --- Score
-    let score = findings.reduce((s, f) => s + (f.points || 0), 0);
-    score = Math.min(100, score);
-    let verdict = 'BAJO';
-    if (score >= 80) verdict = 'CRITICO';
-    else if (score >= 50) verdict = 'ALTO';
-    else if (score >= 20) verdict = 'MEDIO';
+    // --- Score: suma dentro de cada categoría, cada categoría con su techo
+    const desglose = Object.keys(CATEGORIAS).map(cat => {
+      const dela = findings.filter(f => f.cat === cat);
+      const bruto = dela.reduce((s, f) => s + (f.points || 0), 0);
+      const techo = CATEGORIAS[cat].techo;
+      return { cat, nombre: CATEGORIAS[cat].nombre, bruto, techo,
+               puntos: Math.min(bruto, techo), reglas: dela.length };
+    });
+    const score = desglose.reduce((s, d) => s + d.puntos, 0);
+    const verdict = UMBRALES.find(([min]) => score >= min)[1];
 
     // --- IOCs
     const iocDomains = new Set();
@@ -881,7 +989,7 @@
       'message-id', 'in-reply-to', 'references', 'x-mailer', 'user-agent', 'x-originating-ip',
       'authentication-results', 'received-spf', 'dkim-signature', 'arc-authentication-results',
       'x-forefront-antispam-report', 'x-microsoft-antispam', 'x-spam-status', 'x-spam-score',
-      'list-unsubscribe', 'content-type', 'mime-version', 'x-priority', 'importance', 'sender',
+      'list-unsubscribe', 'content-type', 'mime-versión', 'x-priority', 'importance', 'sender',
       'x-sender', 'x-original-from', 'x-authenticated-sender', 'x-php-originating-script'];
 
     return {
@@ -889,7 +997,7 @@
         filename: meta.filename || null, sizeBytes: rawLatin1.length,
         analyzedAt: new Date().toISOString(), engine: 'PhishTriage 1.0'
       },
-      score, verdict,
+      score, verdict, scoreBreakdown: desglose,
       summary: {
         from: from[0] ? from[0].address : null,
         fromDisplay: from[0] ? from[0].name : null,
@@ -948,7 +1056,7 @@
     L.push('');
     for (const f of r.findings) L.push('- ' + (sevIcon[f.sev] || '') + ' ' + f.msg + (f.points ? ' _(+' + f.points + ')_' : ''));
     L.push('');
-    L.push('## Autenticacion');
+    L.push('## Autenticación');
     L.push('');
     L.push('```');
     L.push('SPF      : ' + (r.auth.spf || 'n/d') + '   dominio: ' + (r.auth.spfDomain || 'n/d'));
@@ -993,16 +1101,8 @@
     for (const u of r.iocs.urlsDefanged) L.push(u);
     for (const h of r.iocs.hashes) L.push(h);
     L.push('```');
-    if (r.enrichment) {
-      L.push('');
-      L.push('## Enriquecimiento');
-      L.push('');
-      L.push('```json');
-      L.push(JSON.stringify(r.enrichment, null, 2));
-      L.push('```');
-    }
     L.push('');
-    L.push('_Generado por PhishTriage. Analisis heuristico: revisa siempre manualmente antes de actuar._');
+    L.push('_Generado por PhishTriage. Análisis heurístico: revisa siempre manualmente antes de actuar._');
     return L.join('\n');
   }
 

@@ -2,7 +2,7 @@
  * Prueba de la interfaz web con jsdom: carga index.html, dispara el boton de
  * ejemplo y comprueba que cada panel se pinta con lo que toca.
  *
- *   npm install jsdom      (unica dependencia, y solo para esta prueba)
+ *   npm install jsdom      (única dependencia, y solo para esta prueba)
  *   node tests/ui-test.mjs
  *
  * Si jsdom no esta instalado, la prueba se salta sin fallar.
@@ -27,8 +27,8 @@ const sample = fs.readFileSync(path.join(ROOT, 'samples/sample-phishing.eml'));
 
 const vc = new VirtualConsole();
 vc.on('jsdomError', e => {
-  // scrollTo y la carga de config.local.js no estan implementados en jsdom
-  if (!/scrollTo|config\.local\.js/.test(String(e.message))) console.log('JSDOM ERROR:', e.message);
+  // scrollTo no está implementado en jsdom
+  if (!/scrollTo/.test(String(e.message))) console.log('JSDOM ERROR:', e.message);
 });
 
 const dom = new JSDOM(html, {
@@ -46,7 +46,7 @@ const dom = new JSDOM(html, {
 });
 
 const w = dom.window, d = w.document;
-for (const f of ['assets/eml.js', 'assets/enrich.js', 'assets/app.js']) {
+for (const f of ['assets/eml.js', 'assets/app.js']) {
   const s = d.createElement('script');
   s.textContent = fs.readFileSync(path.join(ROOT, f), 'utf8');
   d.body.appendChild(s);
@@ -69,7 +69,6 @@ async function waitFor(cond, ms = 20000, label = '') {
 
 console.log('\n== interfaz ==');
 chk('motor cargado', typeof w.PhishTriage === 'object');
-chk('enriquecimiento cargado', typeof w.PhishEnrich === 'object');
 console.log('  info  crypto.subtle disponible: ' + !!(w.crypto && w.crypto.subtle));
 
 d.querySelector('#btnSample').dispatchEvent(new w.Event('click'));
@@ -79,23 +78,27 @@ await waitFor(() => d.querySelectorAll('#p-adjuntos .att-item').length === 2, 20
 chk('resultado visible', !d.querySelector('#result').hidden);
 chk('veredicto critico', /CRITICO/.test(d.querySelector('#verdictTitle').textContent));
 chk('score en el anillo', d.querySelector('#ringTxt').textContent === '100');
-chk('chips de autenticacion', /SPF/.test(d.querySelector('#authChips').textContent));
+chk('chips de autenticación', /SPF/.test(d.querySelector('#authChips').textContent));
 chk('vista sencilla activa por defecto', d.querySelector('.panel[data-p="simple"]').classList.contains('active'));
 chk('titular en cristiano', /fraude/i.test(d.querySelector('#p-simple').textContent),
   d.querySelector('#p-simple').textContent.slice(0, 60));
 chk('consejos accionables', d.querySelectorAll('#p-simple ol li').length >= 3);
-chk('razones traducidas', /contrasena|enlace|adjunto/i.test(d.querySelector('#p-simple').textContent));
+chk('razones traducidas', /contraseña|enlace|adjunto/i.test(d.querySelector('#p-simple').textContent));
 chk('enlaces de consulta sin clave a VT',
   d.querySelector('#p-simple a[href^="https://www.virustotal.com/gui/file/"]') !== null);
 chk('enlace a AbuseIPDB',
   d.querySelector('#p-simple a[href^="https://www.abuseipdb.com/check/"]') !== null);
-chk('los enlaces salen a pestana nueva y sin referrer',
+chk('los enlaces salen a pestaña nueva y sin referrer',
   Array.from(d.querySelectorAll('#p-simple a')).every(a =>
     a.getAttribute('target') === '_blank' && /noreferrer/.test(a.getAttribute('rel') || '')));
 chk('resumen con el remitente', /micros0ft-security\.tk/.test(d.querySelector('#p-resumen').textContent));
 chk('arbol MIME', /multipart\/mixed/.test(d.querySelector('#p-resumen').textContent));
 chk('hallazgos pintados', d.querySelectorAll('#p-hallazgos .finding').length === 33,
   String(d.querySelectorAll('#p-hallazgos .finding').length));
+chk('desglose de la nota pintado',
+  /Cómo se reparte la nota/.test(d.querySelector('#p-hallazgos').textContent));
+chk('el desglose cuadra con el total',
+  Array.from(d.querySelectorAll('#p-hallazgos tbody tr')).length === 7);
 chk('cabeceras en tabla', d.querySelectorAll('#p-cabeceras tr').length > 15);
 chk('3 saltos pintados', d.querySelectorAll('#p-received .hop').length === 3);
 chk('7 urls pintadas', d.querySelectorAll('#p-urls .url-item').length === 7);
@@ -112,14 +115,13 @@ if (w.crypto && w.crypto.subtle) {
 }
 chk('el HTML del correo NO se renderiza',
   d.querySelectorAll('#p-cuerpo form, #p-cuerpo input, #p-cuerpo img, #p-cuerpo script').length === 0);
-chk('el HTML se muestra como codigo', /&lt;form/.test(d.querySelectorAll('#p-cuerpo pre')[1].innerHTML));
+chk('el HTML se muestra como código', /&lt;form/.test(d.querySelectorAll('#p-cuerpo pre')[1].innerHTML));
 chk('iocs listados', /verify-account/.test(d.querySelector('#p-iocs').textContent));
 chk('json pintado', d.querySelector('#p-json pre').textContent.length > 5000);
-chk('aviso de enriquecimiento sin configurar', /Sin configurar/.test(d.querySelector('#p-enriquecimiento').textContent));
-chk('contadores de pestanas', d.querySelector('#nUrls').textContent === '7' && d.querySelector('#nAtt').textContent === '2');
+chk('contadores de pestañas', d.querySelector('#nUrls').textContent === '7' && d.querySelector('#nAtt').textContent === '2');
 
 d.querySelector('#tabs button[data-p="urls"]').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
-chk('cambio de pestana', d.querySelector('.panel[data-p="urls"]').classList.contains('active'));
+chk('cambio de pestaña', d.querySelector('.panel[data-p="urls"]').classList.contains('active'));
 
 d.querySelector('#btnReset').dispatchEvent(new w.Event('click'));
 chk('reset oculta el resultado', d.querySelector('#result').hidden === true);
