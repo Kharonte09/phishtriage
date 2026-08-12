@@ -1,4 +1,4 @@
-/* PhishTriage - interfaz. Todo el trabajo real está en eml.js. */
+/* PhishTriage - interfaz: pinta lo que devuelve parser.js y gestiona los clics. */
 (function () {
   'use strict';
 

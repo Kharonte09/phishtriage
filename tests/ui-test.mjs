@@ -43,7 +43,7 @@ const dom = new JSDOM(html, {
 });
 
 const w = dom.window, d = w.document;
-for (const f of ['assets/eml.js', 'assets/app.js']) {
+for (const f of ['assets/parser.js', 'assets/ui.js']) {
   const s = d.createElement('script');
   s.textContent = fs.readFileSync(path.join(ROOT, f), 'utf8');
   d.body.appendChild(s);

@@ -9,7 +9,7 @@ import { emlDeEjemplo } from './fixture.mjs';
 
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
-const PT = require(path.join(ROOT, 'assets/eml.js'));
+const PT = require(path.join(ROOT, 'assets/parser.js'));
 
 let pass = 0, fail = 0;
 function check(name, cond, extra) {
@@ -59,7 +59,7 @@ check('informe serializable', JSON.stringify(r).length > 5000);
 
 console.log('\n== ponderación ==');
 const pesos = (() => {
-  const src = fs.readFileSync(path.join(ROOT, 'assets/eml.js'), 'utf8');
+  const src = fs.readFileSync(path.join(ROOT, 'assets/parser.js'), 'utf8');
   const bloque = src.slice(src.search(/const PESOS = \{/));
   return new Map(Array.from(bloque.slice(0, bloque.search(/\n\s*\};/))
     .matchAll(/'([a-z0-9-]+)':\s*\{ cat: '(\w+)', pts: (\d+), sev: '(\w+)' \}/g))
