@@ -478,6 +478,22 @@
     'agenciatributaria', 'seguridadsocial', 'endesa', 'iberdrola', 'movistar', 'vodafone',
     'binance', 'coinbase', 'metamask', 'revolut', 'wetransfer', 'zoom', 'teams', 'chase', 'hsbc'];
 
+  // Correo gratuito: legítimo para una persona, sospechoso cuando quien escribe
+  // dice ser el director financiero de una empresa.
+  const FREEMAIL = new Set(['gmail.com', 'googlemail.com', 'hotmail.com', 'hotmail.es',
+    'outlook.com', 'outlook.es', 'live.com', 'yahoo.com', 'yahoo.es', 'aol.com',
+    'protonmail.com', 'proton.me', 'gmx.com', 'mail.com', 'yandex.com', 'icloud.com']);
+
+  const CARGOS = /\b(ceo|cfo|coo|cto|director|directora|direccion|dirección|gerente|presidente|presidenta|administrador|administradora|jefe|jefa|responsable|manager|head of)\b/i;
+
+  // Servicios de archivos: el phishing desde cuentas comprometidas casi siempre
+  // apunta aquí, porque el dominio es legítimo y ningún filtro lo bloquea.
+  const FILEHOSTS = new Set(['drive.google.com', 'docs.google.com', 'dropbox.com',
+    'wetransfer.com', 'we.tl', 'onedrive.live.com', '1drv.ms', 'mega.nz', 'mediafire.com',
+    'box.com', 'sharefile.com', 'sync.com', 'pcloud.com', 'terabox.com']);
+
+  const IBAN_RE = /\b[A-Z]{2}\d{2}[ ]?(?:[A-Za-z0-9]{4}[ ]?){3,7}[A-Za-z0-9]{1,4}\b/;
+
   const URL_RE = /\b(?:https?|ftp|file):\/\/[^\s<>"'`)\]}]+|\bwww\.[a-z0-9-]+(?:\.[a-z0-9-]+)+[^\s<>"'`)\]}]*/gi;
 
   function parseUrl(u) {
@@ -559,6 +575,9 @@
       const brandHit = BRANDS.find(b => host.replace(/[^a-z0-9]/g, '').includes(b) && !od.split('.')[0].startsWith(b));
       if (brandHit) flags.push({ id: 'url-brand', sev: 'high', msg: 'Marca "' + brandHit + '" en subdominio/ruta de un dominio ajeno' });
       if (/^data:/i.test(p.url)) flags.push({ id: 'url-data', sev: 'high', msg: 'data: URI (HTML embebido)' });
+      if (FILEHOSTS.has(host) || FILEHOSTS.has(od)) {
+        flags.push({ id: 'url-filehost', sev: 'low', msg: 'Enlace a un servicio de archivos (' + host + '): comprueba que esperabas ese documento' });
+      }
 
       for (const t of texts) {
         const tp = t.match(URL_RE);
@@ -704,6 +723,8 @@
     // --- Identidad del remitente (techo 20) ----------------------------------
     'rp-mismatch':     { cat: 'identidad', pts: 15, sev: 'high' },
     'replyto-mismatch':{ cat: 'identidad', pts: 18, sev: 'high' },
+    'replyto-freemail':{ cat: 'identidad', pts: 15, sev: 'high' },
+    'from-freemail-cargo': { cat: 'identidad', pts: 15, sev: 'high' },
     'dn-email':        { cat: 'identidad', pts: 22, sev: 'high' },
     'dn-brand':        { cat: 'identidad', pts: 18, sev: 'high' },
     'dn-homoglyph':    { cat: 'identidad', pts: 12, sev: 'medium' },
@@ -727,6 +748,7 @@
     'url-port':        { cat: 'enlaces', pts: 8, sev: 'medium' },
     'url-http':        { cat: 'enlaces', pts: 6, sev: 'medium' },
     'url-subdomains':  { cat: 'enlaces', pts: 4, sev: 'low' },
+    'url-filehost':    { cat: 'enlaces', pts: 4, sev: 'low' },
     'url-redirector':  { cat: 'enlaces', pts: 0, sev: 'info' },
 
     // --- Adjuntos (techo 15) --------------------------------------------------
@@ -746,6 +768,8 @@
     'body-script':     { cat: 'contenido', pts: 18, sev: 'high' },
     'body-refresh':    { cat: 'contenido', pts: 18, sev: 'high' },
     'body-bec':        { cat: 'contenido', pts: 15, sev: 'high' },
+    'body-iban':       { cat: 'contenido', pts: 12, sev: 'high' },
+    'body-nocontacto': { cat: 'contenido', pts: 10, sev: 'medium' },
     'body-iframe':     { cat: 'contenido', pts: 12, sev: 'medium' },
     'body-image':      { cat: 'contenido', pts: 12, sev: 'medium' },
     'body-hidden':     { cat: 'contenido', pts: 10, sev: 'medium' },
@@ -754,16 +778,39 @@
     'body-entities':   { cat: 'contenido', pts: 6, sev: 'low' },
     'subj-urgency':    { cat: 'contenido', pts: 8, sev: 'medium' },
     'subj-nothread':   { cat: 'contenido', pts: 8, sev: 'medium' },
-    'subj-fakereply':  { cat: 'contenido', pts: 5, sev: 'low' },
 
     // --- Transporte y cabeceras (techo 5) -------------------------------------
     'xmailer':         { cat: 'transporte', pts: 10, sev: 'medium' },
     'rcv-none':        { cat: 'transporte', pts: 10, sev: 'medium' },
-    'rcv-one':         { cat: 'transporte', pts: 5, sev: 'low' },
+    'rcv-one':         { cat: 'transporte', pts: 3, sev: 'low' },
     'rcv-delay':       { cat: 'transporte', pts: 4, sev: 'low' },
     'date-skew':       { cat: 'transporte', pts: 5, sev: 'low' },
     'x-orig-ip':       { cat: 'transporte', pts: 0, sev: 'info' }
   };
+
+  // Hay combinaciones que valen mas que la suma de sus partes. Un correo que
+  // pide una transferencia NO es sospechoso por pedirla, ni por venir de un
+  // gmail, ni por traer un IBAN: lo es porque hace las tres cosas a la vez.
+  // Estas correlaciones puntuan aparte, con su propio techo de 20.
+  const COMBOS = [
+    { id: 'combo-bec', pts: 20, sev: 'high',
+      msg: 'Encaja con el fraude del jefe: alguien que dice ser de la empresa, desde una cuenta que no es la suya, pidiendo un pago',
+      si: ids => (ids.has('from-freemail-cargo') || ids.has('replyto-freemail') || ids.has('dn-brand') || ids.has('dn-email'))
+        && (ids.has('body-bec') || ids.has('body-iban')) },
+    { id: 'combo-credenciales', pts: 15, sev: 'high',
+      msg: 'Encaja con el robo de contraseñas: te lleva a una página falsa y te pide que te identifiques',
+      si: ids => (ids.has('body-password') || ids.has('body-form') || ids.has('url-creds'))
+        && (ids.has('url-mismatch') || ids.has('url-brand') || ids.has('url-punycode') || ids.has('url-ip')) },
+    { id: 'combo-malware', pts: 15, sev: 'high',
+      msg: 'Encaja con el envío de malware: adjunto peligroso y una excusa para que lo abras deprisa',
+      si: ids => (ids.has('att-exec') || ids.has('att-macro') || ids.has('att-html'))
+        && (ids.has('body-empty') || ids.has('subj-urgency') || ids.has('subj-nothread') || ids.has('dmarc-fail')) },
+    { id: 'combo-extorsion', pts: 15, sev: 'high',
+      msg: 'Encaja con la extorsión: amenaza y una cartera de criptomonedas para pagar',
+      si: ids => ids.has('body-crypto')
+        && (ids.has('from-tld') || ids.has('spf-none') || ids.has('spf-neutral') || ids.has('dmarc-absent') || ids.has('dmarc-none')) }
+  ];
+  const TECHO_COMBOS = 20;
 
   // Umbrales del veredicto
   const UMBRALES = [[80, 'CRITICO'], [50, 'ALTO'], [20, 'MEDIO'], [0, 'BAJO']];
@@ -810,6 +857,10 @@
     const html = htmlParts.join('\n\n');
 
     const urls = extractLinks(html, plain);
+    // Muchos correos solo traen HTML: si solo se mira el texto plano, la mitad
+    // de las reglas de contenido no se enteran de nada.
+    const textoVisible = (plain + ' ' + decodeEntities(html.replace(/<[^>]+>/g, ' ')))
+      .replace(/\s+/g, ' ').trim();
     const attachments = await collectAttachments(root);
 
     // Un .eml reconstruido o exportado a mano no conserva cabeceras de transporte:
@@ -855,6 +906,9 @@
     }
     if (replyTo[0] && fromOrg && replyTo[0].orgDomain && replyTo[0].orgDomain !== fromOrg) {
       push('replyto-mismatch', 'Reply-To apunta a ' + replyTo[0].address + ', dominio ajeno al remitente');
+    } else if (replyTo[0] && from[0] && replyTo[0].address.toLowerCase() !== from[0].address.toLowerCase()
+               && FREEMAIL.has(fromOrg)) {
+      push('replyto-freemail', 'La respuesta iría a ' + replyTo[0].address + ', otra cuenta distinta de la que envía');
     }
     if (from[0]) {
       const dn = from[0].name || '';
@@ -873,6 +927,9 @@
       if (/(^|\.)xn--/i.test(from[0].domain || '')) push('from-punycode', 'Dominio del remitente en punycode: ' + from[0].domain);
       if (RISKY_TLD.has((from[0].domain || '').split('.').pop())) {
         push('from-tld', 'TLD de alto abuso en el remitente: .' + from[0].domain.split('.').pop());
+      }
+      if (FREEMAIL.has(fromOrg) && CARGOS.test(dn)) {
+        push('from-freemail-cargo', 'Se presenta como "' + dn.trim() + '" pero escribe desde una cuenta de correo gratuita');
       }
       if (from.length > 1) push('from-multi', 'Múltiples direcciones en From (' + from.length + '): técnica de evasión');
     } else {
@@ -914,11 +971,10 @@
 
     // --- Asunto / cuerpo
     if (URGENCY.test(subject)) push('subj-urgency', 'Asunto con lenguaje de urgencia/presión');
-    if (/^\s*(re|fw|fwd|rv)\s*:/i.test(subject) && hops.length <= 1) {
-      push('subj-fakereply', 'Asunto tipo respuesta ("Re:") sin cabeceras de hilo (In-Reply-To/References ausentes)');
-    }
-    if (/^\s*(re|fw|fwd|rv)\s*:/i.test(subject) && !headerGet(H, 'in-reply-to') && !headerGet(H, 'references')) {
-      push('subj-nothread', 'Simula responder a un hilo pero no hay In-Reply-To ni References');
+    // Ojo: un reenvío (Fwd:/RV:) sí puede no tener In-Reply-To de forma legítima.
+    // Solo cuenta cuando dice ser una respuesta.
+    if (/^\s*re\s*:/i.test(subject) && !headerGet(H, 'in-reply-to') && !headerGet(H, 'references')) {
+      push('subj-nothread', 'Simula responder a un hilo que nunca existió: no hay In-Reply-To ni References');
     }
     if (html) {
       if (/<form\b/i.test(html)) push('body-form', 'Formulario HTML embebido en el correo (captura de credenciales)');
@@ -936,11 +992,18 @@
       }
     }
     if (!html && !plain && attachments.length) push('body-empty', 'Cuerpo vacio con adjunto: patron de malware/spear-phishing');
-    if (/(bitcoin|btc|usdt|ethereum|monero|wallet|seed phrase|frase semilla|criptomoneda)/i.test(plain + ' ' + subject)) {
+    if (/(bitcoin|btc|usdt|ethereum|monero|wallet|seed phrase|frase semilla|criptomoneda)/i.test(textoVisible + ' ' + subject)) {
       push('body-crypto', 'Referencias a criptomonedas (extorsión o fraude de inversión)');
     }
-    if (/(transferencia|wire transfer|iban|swift|cambio de cuenta|bank details|datos bancarios|nomina|payroll)/i.test(plain + ' ' + subject) && (replyTo.length || alignment.dkim === false)) {
-      push('body-bec', 'Patron BEC: instrucciones de pago/datos bancarios con remitente no alineado');
+    const pinta_bec = /(transferencia|wire transfer|iban|swift|cambio de cuenta|bank details|datos bancarios|nomina|payroll|pago urgente|urgent payment)/i.test(textoVisible + ' ' + subject);
+    if (pinta_bec && (replyTo.length || alignment.dkim === false || FREEMAIL.has(fromOrg))) {
+      push('body-bec', 'Patrón BEC: pide un pago o un cambio de datos bancarios y el remitente no es de fiar');
+    }
+    if (IBAN_RE.test(textoVisible) && pinta_bec) {
+      push('body-iban', 'Da un número de cuenta (IBAN) dentro del correo para que hagas el ingreso ahí');
+    }
+    if (/(no me llames|no llames|no puedo hablar|estoy en una reunion|estoy en una reunión|no digas nada|es confidencial)/i.test(textoVisible)) {
+      push('body-nocontacto', 'Pide que no le llames ni lo comentes: sirve para que nadie verifique la petición');
     }
 
     // --- Puntos de URLs y adjuntos
@@ -957,6 +1020,12 @@
       for (const f of a.flags) push(f.id, f.msg + ' [' + a.filename + ']');
     }
 
+    // --- Combinaciones: correlaciones que valen más que la suma de sus partes
+    const disparadas = new Set(findings.map(f => f.id));
+    for (const c of COMBOS) {
+      if (c.si(disparadas)) findings.push({ id: c.id, msg: c.msg, cat: 'combinacion', sev: c.sev, points: c.pts });
+    }
+
     // --- Score: suma dentro de cada categoría, cada categoría con su techo
     const desglose = Object.keys(CATEGORIAS).map(cat => {
       const dela = findings.filter(f => f.cat === cat);
@@ -965,7 +1034,13 @@
       return { cat, nombre: CATEGORIAS[cat].nombre, bruto, techo,
                puntos: Math.min(bruto, techo), reglas: dela.length };
     });
-    const score = desglose.reduce((s, d) => s + d.puntos, 0);
+    const brutoCombos = findings.filter(f => f.cat === 'combinacion').reduce((s, f) => s + f.points, 0);
+    if (brutoCombos) {
+      desglose.push({ cat: 'combinacion', nombre: 'Combinaciones que encajan con un fraude conocido',
+        bruto: brutoCombos, techo: TECHO_COMBOS, puntos: Math.min(brutoCombos, TECHO_COMBOS),
+        reglas: findings.filter(f => f.cat === 'combinacion').length });
+    }
+    const score = Math.min(100, desglose.reduce((s, d) => s + d.puntos, 0));
     const verdict = UMBRALES.find(([min]) => score >= min)[1];
 
     // --- IOCs

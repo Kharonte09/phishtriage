@@ -78,6 +78,30 @@ const BOLETIN = [
   ''
 ].join('\r\n');
 
+const BEC = [
+  'Authentication-Results: mx.corp.es; spf=pass smtp.mailfrom=gmail.com; dkim=pass header.d=gmail.com; dmarc=pass header.from=gmail.com',
+  'Received: from mail-wr1.google.com (mail-wr1.google.com [209.85.221.50]) by mx.corp.es',
+  ' with ESMTPS id A1; Mon, 10 Aug 2026 09:00:00 +0200',
+  'From: "Carlos Ruiz (CEO)" <carlos.ruiz.director@gmail.com>',
+  'Reply-To: carlos.ruiz.pagos@gmail.com',
+  'To: maria@corp.es', 'Subject: Transferencia urgente',
+  'Message-ID: <bec1@gmail.com>', 'Date: Mon, 10 Aug 2026 09:00:00 +0200',
+  'Content-Type: text/html; charset="utf-8"', '',
+  '<html><body><p>Necesito una transferencia hoy. Nuevo IBAN ES91 2100 0418 4502 0005 1332.',
+  ' No me llames, estoy en una reunion.</p></body></html>', ''
+].join('\r\n');
+
+const BANCO = [
+  'Authentication-Results: mx.corp.es; spf=pass smtp.mailfrom=bbva.es; dkim=pass header.d=bbva.es; dmarc=pass header.from=bbva.es',
+  'Received: from mx.bbva.es (mx.bbva.es [195.55.20.30]) by mx.corp.es with ESMTPS id A1;',
+  ' Mon, 10 Aug 2026 09:00:00 +0200',
+  'From: BBVA <avisos@bbva.es>', 'To: maria@corp.es',
+  'Subject: Accion requerida: verifica tu operacion en 24 horas',
+  'Message-ID: <b1@bbva.es>', 'Date: Mon, 10 Aug 2026 09:00:00 +0200',
+  'Content-Type: text/html; charset="utf-8"', '',
+  '<html><body><p><a href="https://www.bbva.es/personas/operaciones.html">Revisar en la app</a></p></body></html>', ''
+].join('\r\n');
+
 // --- motor -------------------------------------------------------------------
 console.log('\n== motor ==');
 const r = await analizar(PHISHING, 'phishing.eml');
@@ -103,6 +127,15 @@ check('detecta la doble extensión', ids.includes('att-double'));
 check('detecta el campo de contraseña', ids.includes('body-password'));
 check('detecta el remitente suplantado', ids.includes('dn-brand'));
 
+console.log('\n== casos difíciles ==');
+const bec = await analizar(BEC, 'bec.eml');
+const banco = await analizar(BANCO, 'banco.eml');
+check('el fraude del jefe (sin enlaces ni adjuntos) llega a ALTO',
+  bec.score >= 50, bec.verdict + ' ' + bec.score + ' ' + bec.findings.map(f => f.id));
+check('y lo identifica como tal', bec.findings.some(f => f.id === 'combo-bec'));
+check('un aviso real del banco, alarmista pero legítimo, se queda en BAJO',
+  banco.verdict === 'BAJO', banco.verdict + ' ' + banco.score + ' ' + banco.findings.map(f => f.id));
+
 console.log('\n== ponderación ==');
 const pesos = (() => {
   const src = fs.readFileSync(path.join(ROOT, 'assets/parser.js'), 'utf8');
@@ -110,11 +143,16 @@ const pesos = (() => {
   return new Set(Array.from(bloque.slice(0, bloque.search(/\n\s*\};/))
     .matchAll(/'([a-z0-9-]+)':\s*\{ cat:/g)).map(m => m[1]));
 })();
-check('los techos suman 100', r.scoreBreakdown.reduce((s, d) => s + d.techo, 0) === 100);
+check('los techos de las categorías suman 100',
+  r.scoreBreakdown.filter(d => d.cat !== 'combinacion').reduce((s, d) => s + d.techo, 0) === 100);
+check('las combinaciones no pasan de 20',
+  r.scoreBreakdown.filter(d => d.cat === 'combinacion').every(d => d.puntos <= 20));
 check('ninguna categoría se pasa de su techo', r.scoreBreakdown.every(d => d.puntos <= d.techo));
-check('el total es la suma del desglose', r.scoreBreakdown.reduce((s, d) => s + d.puntos, 0) === r.score);
-check('cada regla que dispara tiene su peso', ids.every(i => pesos.has(i)),
-  ids.filter(i => !pesos.has(i)).join());
+check('el total es la suma del desglose, con tope 100',
+  Math.min(100, r.scoreBreakdown.reduce((s, d) => s + d.puntos, 0)) === r.score);
+check('cada regla que dispara tiene su peso',
+  ids.filter(i => !i.startsWith('combo-')).every(i => pesos.has(i)),
+  ids.filter(i => !i.startsWith('combo-') && !pesos.has(i)).join());
 
 // --- interfaz (solo si hay jsdom) --------------------------------------------
 let JSDOM;
