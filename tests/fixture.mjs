@@ -1,14 +1,12 @@
-#!/usr/bin/env python3
-"""Genera samples/sample-phishing.eml: correo de phishing sintetico para pruebas.
+/**
+ * Correo de phishing sintético que usan las pruebas.
+ *
+ * Vive aquí, en el código de test, y no como fichero suelto en el repo: así no
+ * se publica en la web ni hay un .eml dando vueltas por la carpeta. Todo el
+ * contenido es inventado y los "adjuntos" son texto plano, no hay malware.
+ */
 
-Todo el contenido es inventado. No hay malware real: los "adjuntos" son texto.
-"""
-import base64
-import os
-
-HERE = os.path.dirname(os.path.abspath(__file__))
-
-HTML = """<html><body style="font-family:Segoe UI,Arial">
+const HTML = `<html><body style="font-family:Segoe UI,Arial">
 <div style="font-size:0;color:#ffffff">factura seguimiento ref 88213 correo legitimo confianza</div>
 <p>Estimado usuario,</p>
 <p><b>Su buz&oacute;n de Microsoft 365 ser&aacute; suspendido en 24 horas.</b>
@@ -25,22 +23,45 @@ https://login.microsoftonline.com/verify</a></p>
   <input type="submit" value="Verificar">
 </form>
 <p style="font-size:9px;color:#888">Microsoft Corporation, One Microsoft Way, Redmond WA</p>
-</body></html>"""
+</body></html>`;
 
-PLAIN = """Estimado usuario,
+const PLAIN = `Estimado usuario,
 
-Su buzon de Microsoft 365 será suspendido en 24 horas. Verifique su contraseña:
+Su buzon de Microsoft 365 sera suspendido en 24 horas. Verifique su contrasena:
 http://microsoft-login.verify-account.tk/o365/login.php?id=dGFyZ2V0
 
 Soporte Microsoft 365
-"""
+`;
 
-HTML_ATTACH = """<!doctype html><meta http-equiv="refresh" content="0;url=http://microsoft-login.verify-account.tk/o365/login.php">
-<title>Outlook</title><body>Cargando su sesion...</body>"""
+const HTML_ATTACH = `<!doctype html><meta http-equiv="refresh" content="0;url=http://microsoft-login.verify-account.tk/o365/login.php">
+<title>Outlook</title><body>Cargando su sesion...</body>`;
 
-DOCM = b"PK\x03\x04" + b"FAKE-OOXML-CON-MACROS-PARA-PRUEBAS" * 12
+const DOCM = 'PK' + 'FAKE-OOXML-CON-MACROS-PARA-PRUEBAS'.repeat(12);
 
-EML = """Received: from mx1.corp-victima.es (mx1.corp-victima.es [10.20.0.5])
+function qp(text) {
+  return text.split('\n').map(linea => {
+    let out = '';
+    for (const ch of linea) {
+      const c = ch.codePointAt(0);
+      if (ch === ' ') out += ' ';
+      else if (c >= 33 && c <= 126 && ch !== '=') out += ch;
+      else out += Array.from(new TextEncoder().encode(ch))
+        .map(b => '=' + b.toString(16).toUpperCase().padStart(2, '0')).join('');
+    }
+    return out;
+  }).join('\n');
+}
+
+function b64(str, esUtf8) {
+  const bytes = esUtf8 ? new TextEncoder().encode(str)
+    : Uint8Array.from(str, c => c.charCodeAt(0) & 0xff);
+  const s = Buffer.from(bytes).toString('base64');
+  return s.match(/.{1,76}/g).join('\n');
+}
+
+/** El correo completo, con CRLF como manda el RFC, en bytes. */
+export function emlDeEjemplo() {
+  const eml = `Received: from mx1.corp-victima.es (mx1.corp-victima.es [10.20.0.5])
  by imap.corp-victima.es (Postfix) with ESMTPS id 9F2B14A21C
  for <maria.lopez@corp-victima.es>; Mon, 10 Aug 2026 09:14:52 +0200 (CEST)
 Received: from vps-4412.cheap-hosting.ru (vps-4412.cheap-hosting.ru [185.220.101.44])
@@ -68,7 +89,7 @@ X-Mailer: PHPMailer 6.8.0 (https://github.com/PHPMailer/PHPMailer)
 X-Originating-IP: [45.155.205.233]
 X-Priority: 1 (Highest)
 Importance: High
-MIME-Versión: 1.0
+MIME-Version: 1.0
 Content-Type: multipart/mixed; boundary="=_outer_9911"
 
 --=_outer_9911
@@ -78,12 +99,12 @@ Content-Type: multipart/alternative; boundary="=_alt_5522"
 Content-Type: text/plain; charset="utf-8"
 Content-Transfer-Encoding: quoted-printable
 
-{plain_qp}
+${qp(PLAIN)}
 --=_alt_5522
 Content-Type: text/html; charset="utf-8"
 Content-Transfer-Encoding: base64
 
-{html_b64}
+${b64(HTML, true)}
 --=_alt_5522--
 
 --=_outer_9911
@@ -91,46 +112,14 @@ Content-Type: text/html; name="Factura_88213.pdf.html"
 Content-Transfer-Encoding: base64
 Content-Disposition: attachment; filename="Factura_88213.pdf.html"
 
-{htmlatt_b64}
+${b64(HTML_ATTACH, true)}
 --=_outer_9911
 Content-Type: application/vnd.ms-word.document.macroEnabled.12; name="Detalles.docm"
 Content-Transfer-Encoding: base64
 Content-Disposition: attachment; filename="Detalles.docm"
 
-{docm_b64}
+${b64(DOCM, false)}
 --=_outer_9911--
-"""
-
-
-def qp(text):
-    out = []
-    for line in text.split("\n"):
-        buf = ""
-        for ch in line:
-            o = ord(ch)
-            if 33 <= o <= 126 and ch != "=":
-                buf += ch
-            elif ch == " ":
-                buf += " "
-            else:
-                buf += "".join("=%02X" % b for b in ch.encode("utf-8"))
-        out.append(buf)
-    return "\n".join(out)
-
-
-def wrap(b: bytes, n: int = 76) -> str:
-    s = base64.b64encode(b).decode()
-    return "\n".join(s[i:i + n] for i in range(0, len(s), n))
-
-
-eml = EML.format(
-    plain_qp=qp(PLAIN),
-    html_b64=wrap(HTML.encode("utf-8")),
-    htmlatt_b64=wrap(HTML_ATTACH.encode("utf-8")),
-    docm_b64=wrap(DOCM),
-).replace("\n", "\r\n")
-
-path = os.path.join(HERE, "sample-phishing.eml")
-with open(path, "wb") as fh:
-    fh.write(eml.encode("utf-8"))
-print("escrito", path, len(eml), "bytes")
+`.replace(/\n/g, '\r\n');
+  return new TextEncoder().encode(eml);
+}

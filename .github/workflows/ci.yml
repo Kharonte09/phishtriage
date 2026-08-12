@@ -17,34 +17,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
 
-      - name: Versiones
-        run: |
-          node --version
-          python3 --version
-
-      - name: Motor JS + paridad con el CLI
+      - name: Motor de analisis
         run: node tests/run-tests.mjs
 
-      - name: Interfaz web (jsdom)
+      - name: Interfaz web
         run: |
           npm install --no-save jsdom
-          node -e "console.log('jsdom', require('jsdom/package.json').version)"
           node tests/ui-test.mjs
-
-      - name: El CLI marca el ejemplo como critico (exit 3)
-        run: |
-          code=0
-          python3 cli/phishtriage.py samples/sample-phishing.eml --quiet --no-color || code=$?
-          echo "codigo de salida: $code"
-          test "$code" = "3"
-
-      - name: Ninguna clave de API en el repositorio
-        run: |
-          if git grep -nIE '(VT_API_KEY|ABUSEIPDB_API_KEY)[[:space:]]*[:=][[:space:]]*.?[A-Za-z0-9]{20,}' -- .; then
-            echo "posible clave hardcodeada"
-            exit 1
-          fi

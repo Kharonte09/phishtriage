@@ -15,15 +15,6 @@
 
   function el(html) { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild; }
 
-  function download(name, text, type) {
-    const blob = new Blob([text], { type: type || 'text/plain;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = name;
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-  }
-
   async function copy(text, btn) {
     try { await navigator.clipboard.writeText(text); }
     catch (e) {
@@ -77,7 +68,7 @@
   function show(r) {
     current = r;
     $('#result').hidden = false;
-    ['#btnJson', '#btnMd', '#btnIocs', '#btnReset'].forEach(s => $(s).disabled = false);
+    ['#btnReset'].forEach(s => $(s).disabled = false);
 
     // veredicto
     const ring = $('#ring'), svg = $('.score-ring');
@@ -124,6 +115,13 @@
   // --- Vista para gente que no es de esto -------------------------------------
   // Traduce los ids de hallazgo a frases que entienda cualquiera.
   const EN_CRISTIANO = {
+    'dkim-absent': 'El correo no viene firmado por el dominio del que dice venir.',
+    'compauth': 'El propio filtro de Microsoft ya lo marcó como autenticación dudosa.',
+    'mid-mismatch': 'El identificador interno del correo lo generó un dominio distinto.',
+    'url-tld': 'Hay enlaces a dominios del tipo que usan casi siempre los fraudes.',
+    'url-http': 'Un enlace pide datos por una conexión sin cifrar.',
+    'url-port': 'Un enlace usa un puerto raro, cosa de servidores montados a mano.',
+    'url-creds': 'Hay enlaces que llevan a páginas de "inicio de sesión" o "verificar cuenta".',
     'dmarc-fail': 'El correo no pasa la verificación del dominio que dice ser.',
     'spf-fail': 'El servidor que lo envió no está autorizado por ese dominio.',
     'dkim-fail': 'La firma del correo no es válida: alguien lo ha manipulado o falsificado.',
@@ -145,19 +143,19 @@
     'body-bec': 'Pide cambiar datos bancarios o hacer un pago.',
     'body-crypto': 'Habla de criptomonedas: tipico de estafas de inversión o de extorsión.',
     'xmailer': 'Se ha enviado con una herramienta de correo masivo, no con un cliente normal.',
-    'url:url-mismatch': 'Un enlace enseña una dirección pero lleva a otra distinta.',
-    'url:url-ip': 'Un enlace apunta a una IP en vez de a una web con nombre.',
-    'url:url-punycode': 'Un enlace usa un dominio con letras que imitan a otro conocido.',
-    'url:url-brand': 'Un enlace mete el nombre de una marca dentro de un dominio que no es suyo.',
-    'url:url-shortener': 'Hay enlaces acortados que esconden a donde llevan de verdad.',
-    'url:url-creds': 'Hay enlaces que llevan a páginas de "inicio de sesion" o "verificar cuenta".',
-    'url:url-userinfo': 'Un enlace esta construido para aparentar un destino que no es el real.',
-    'att:att-exec': 'Trae un adjunto que es un programa: abrirlo instalaria algo en tu equipo.',
-    'att:att-macro': 'Trae un documento de Office con macros, que pueden ejecutar programas.',
-    'att:att-html': 'Trae una página web como adjunto: truco habitual para robar contraseñas.',
-    'att:att-double': 'Un adjunto tiene doble extensión para parecer un PDF o una foto.',
-    'att:att-mismatch': 'Un adjunto dice ser una cosa y por dentro es otra.',
-    'att:att-rtlo': 'El nombre de un adjunto usa un truco para verse del reves.'
+    'url-mismatch': 'Un enlace enseña una dirección pero lleva a otra distinta.',
+    'url-ip': 'Un enlace apunta a una IP en vez de a una web con nombre.',
+    'url-punycode': 'Un enlace usa un dominio con letras que imitan a otro conocido.',
+    'url-brand': 'Un enlace mete el nombre de una marca dentro de un dominio que no es suyo.',
+    'url-shortener': 'Hay enlaces acortados que esconden a donde llevan de verdad.',
+    'url-creds': 'Hay enlaces que llevan a páginas de "inicio de sesion" o "verificar cuenta".',
+    'url-userinfo': 'Un enlace esta construido para aparentar un destino que no es el real.',
+    'att-exec': 'Trae un adjunto que es un programa: abrirlo instalaria algo en tu equipo.',
+    'att-macro': 'Trae un documento de Office con macros, que pueden ejecutar programas.',
+    'att-html': 'Trae una página web como adjunto: truco habitual para robar contraseñas.',
+    'att-double': 'Un adjunto tiene doble extensión para parecer un PDF o una foto.',
+    'att-mismatch': 'Un adjunto dice ser una cosa y por dentro es otra.',
+    'att-rtlo': 'El nombre de un adjunto usa un truco para verse del reves.'
   };
 
   const CONSEJOS = {
@@ -399,18 +397,8 @@
     $('#p-iocs').innerHTML = blocks.map(([t, arr]) =>
       '<div class="card"><h3>' + t + ' <span class="muted">(' + arr.length + ')</span></h3>' +
       '<pre class="block">' + esc(arr.join('\n') || '-') + '</pre></div>').join('') +
-      '<div class="toolbar"><button id="copyAll">Copiar todo</button>' +
-      '<button id="copyCsv">Descargar CSV</button></div>';
+      '<div class="toolbar"><button id="copyAll">Copiar todo</button></div>';
     $('#copyAll').onclick = e => copy(iocText(r), e.target);
-    $('#copyCsv').onclick = () => {
-      const rows = [['tipo', 'valor', 'defanged']];
-      r.iocs.domains.forEach(d => rows.push(['domain', d, PT.defang(d)]));
-      r.iocs.ips.forEach(d => rows.push(['ip', d, PT.defang(d)]));
-      r.iocs.urls.forEach(d => rows.push(['url', d, PT.defang(d)]));
-      r.iocs.hashes.forEach(d => rows.push(['hash', d, d]));
-      r.iocs.emails.forEach(d => rows.push(['email', d, PT.defang(d)]));
-      download(base(r) + '-iocs.csv', rows.map(x => x.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(',')).join('\n'), 'text/csv');
-    };
   }
 
   function iocText(r) {
@@ -445,27 +433,10 @@
     show(report);
   });
 
-  $('#btnSample').onclick = async () => {
-    try {
-      const res = await fetch('samples/sample-phishing.eml');
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const buf = await res.arrayBuffer();
-      const report = await PT.analyze(PT.bytesToLatin1(new Uint8Array(buf)), { filename: 'sample-phishing.eml' });
-      batch = [{ name: 'sample-phishing.eml', report }];
-      renderBatchList();
-      show(report);
-    } catch (err) {
-      alert('No se pudo cargar el ejemplo (' + err.message + '). Si abres el fichero con file://, sirvelo con "python3 -m http.server".');
-    }
-  };
-
-  $('#btnJson').onclick = () => download(base(current) + '-phishtriage.json', JSON.stringify(current, null, 2), 'application/json');
-  $('#btnMd').onclick = () => download(base(current) + '-informe.md', PT.toMarkdown(current), 'text/markdown');
-  $('#btnIocs').onclick = e => copy(iocText(current), e.target);
   $('#btnReset').onclick = () => {
     current = null; batch = [];
     $('#result').hidden = true; $('#multi').hidden = true; $('#file').value = '';
-    ['#btnJson', '#btnMd', '#btnIocs', '#btnReset'].forEach(s => $(s).disabled = true);
+    ['#btnReset'].forEach(s => $(s).disabled = true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 

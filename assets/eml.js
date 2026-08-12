@@ -1029,85 +1029,8 @@
     return { label, children: node.children.map(c => describeStructure(c)) };
   }
 
-  // ---------------------------------------------------------------------------
-  // Informe Markdown
-  // ---------------------------------------------------------------------------
-
-  function toMarkdown(r) {
-    const L = [];
-    const sevIcon = { high: '[ALTO]', medium: '[MEDIO]', low: '[BAJO]', info: '[INFO]' };
-    L.push('# Informe de triaje de phishing');
-    L.push('');
-    L.push('| Campo | Valor |');
-    L.push('|---|---|');
-    L.push('| Fichero | ' + (r.meta.filename || '-') + ' |');
-    L.push('| Analizado | ' + r.meta.analyzedAt + ' |');
-    L.push('| Veredicto | **' + r.verdict + '** (' + r.score + '/100) |');
-    L.push('| From | `' + (r.summary.fromDisplay || '') + ' <' + (r.summary.from || '') + '>` |');
-    L.push('| Reply-To | `' + (r.summary.replyTo.join(', ') || '-') + '` |');
-    L.push('| Return-Path | `' + (r.summary.returnPath || '-') + '` |');
-    L.push('| Asunto | ' + (r.summary.subject || '-').replace(/\|/g, '\\|') + ' |');
-    L.push('| Fecha | ' + (r.summary.date || '-') + ' |');
-    L.push('| Message-ID | `' + (r.summary.messageId || '-') + '` |');
-    L.push('| IP de origen | `' + (r.summary.originIP ? defang(r.summary.originIP) : '-') + '` |');
-    L.push('| SPF / DKIM / DMARC | ' + (r.auth.spf || 'n/d') + ' / ' + (r.auth.dkim || 'n/d') + ' / ' + (r.auth.dmarc || 'n/d') + ' |');
-    L.push('');
-    L.push('## Hallazgos (' + r.findings.length + ')');
-    L.push('');
-    for (const f of r.findings) L.push('- ' + (sevIcon[f.sev] || '') + ' ' + f.msg + (f.points ? ' _(+' + f.points + ')_' : ''));
-    L.push('');
-    L.push('## Autenticación');
-    L.push('');
-    L.push('```');
-    L.push('SPF      : ' + (r.auth.spf || 'n/d') + '   dominio: ' + (r.auth.spfDomain || 'n/d'));
-    L.push('DKIM     : ' + (r.auth.dkim || 'n/d') + '   d=: ' + (r.auth.dkimDomain || 'n/d'));
-    L.push('DMARC    : ' + (r.auth.dmarc || 'n/d') + '   header.from: ' + (r.auth.dmarcFrom || 'n/d'));
-    L.push('Alineado : SPF=' + String(r.auth.alignment.spf) + '  DKIM=' + String(r.auth.alignment.dkim));
-    L.push('ARC seals: ' + r.auth.arcSeals);
-    for (const s of r.auth.dkimSignatures) L.push('  firma DKIM d=' + s.d + ' s=' + s.s + ' a=' + s.a);
-    L.push('```');
-    L.push('');
-    L.push('## Cadena Received (orden cronologico)');
-    L.push('');
-    for (const h of r.received) {
-      L.push('**Hop ' + h.hop + '**' + (h.delaySeconds !== null ? ' (+' + h.delaySeconds + 's)' : ''));
-      L.push('- from: `' + (h.from || '-') + '`  by: `' + (h.by || '-') + '`  with: ' + (h.with || '-'));
-      L.push('- IPs: ' + (h.ips.map(defang).join(', ') || '-') + (h.date ? '  |  ' + h.date : ''));
-    }
-    L.push('');
-    L.push('## URLs (' + r.urls.length + ')');
-    L.push('');
-    for (const u of r.urls) {
-      L.push('- `' + u.defanged + '`');
-      if (u.anchorTexts.length) L.push('  - texto: ' + u.anchorTexts.map(t => '"' + t + '"').join(' / '));
-      for (const f of u.flags) L.push('  - ' + (sevIcon[f.sev] || '') + ' ' + f.msg);
-    }
-    L.push('');
-    L.push('## Adjuntos (' + r.attachments.length + ')');
-    L.push('');
-    for (const a of r.attachments) {
-      L.push('- **' + a.filename + '** (' + a.mime + ', ' + a.sizeHuman + (a.magic ? ', magic: ' + a.magic : '') + ')');
-      L.push('  - md5: `' + a.md5 + '`');
-      if (a.sha1) L.push('  - sha1: `' + a.sha1 + '`');
-      if (a.sha256) L.push('  - sha256: `' + a.sha256 + '`');
-      for (const f of a.flags) L.push('  - ' + (sevIcon[f.sev] || '') + ' ' + f.msg);
-    }
-    L.push('');
-    L.push('## IOCs (defanged)');
-    L.push('');
-    L.push('```');
-    for (const d of r.iocs.domainsDefanged) L.push(d);
-    for (const i of r.iocs.ips) L.push(defang(i));
-    for (const u of r.iocs.urlsDefanged) L.push(u);
-    for (const h of r.iocs.hashes) L.push(h);
-    L.push('```');
-    L.push('');
-    L.push('_Generado por PhishTriage. Análisis heurístico: revisa siempre manualmente antes de actuar._');
-    return L.join('\n');
-  }
-
   return {
-    analyze, toMarkdown, parseNode, parseAddressList, parseAuthResults, parseReceived,
+    analyze, parseNode, parseAddressList, parseAuthResults, parseReceived,
     extractLinks, decodeRFC2047, defang, orgDomain, isIP, isPrivateIP, hashBytes, md5,
     bytesToLatin1, latin1ToBytes, nodeText, humanSize, SHORTENERS, BRANDS
   };

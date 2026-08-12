@@ -1,24 +1,15 @@
-# Claves de API: NUNCA se suben
-cli/.env
-.env
-
-# Correos reales y salidas de analisis
+# Correos reales: que no se cuele ninguno en el repo
 *.eml
-!samples/sample-phishing.eml
 *.msg
+
+# Salidas de analisis
 out/
 informes/
-out/*.json
-informes/*.json
-*.md.bak
 
-# Basura del sistema
+# Basura del sistema y de las herramientas
 .DS_Store
 Thumbs.db
-__pycache__/
-*.py[cod]
-.venv/
-venv/
 node_modules/
 .idea/
 .vscode/
+__pycache__/

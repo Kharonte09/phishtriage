@@ -10,6 +10,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
+import { emlDeEjemplo } from './fixture.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const require = createRequire(import.meta.url);
@@ -23,7 +24,7 @@ try {
 }
 
 const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
-const sample = fs.readFileSync(path.join(ROOT, 'samples/sample-phishing.eml'));
+const sample = Buffer.from(emlDeEjemplo());
 
 const vc = new VirtualConsole();
 vc.on('jsdomError', e => {
@@ -37,10 +38,6 @@ const dom = new JSDOM(html, {
   virtualConsole: vc,
   beforeParse(w) {
     Object.defineProperty(w, 'crypto', { value: globalThis.crypto, configurable: true });
-    w.fetch = async () => ({
-      ok: true, status: 200,
-      arrayBuffer: async () => sample.buffer.slice(sample.byteOffset, sample.byteOffset + sample.byteLength)
-    });
     w.alert = m => console.log('ALERT:', m);
   }
 });
@@ -71,7 +68,11 @@ console.log('\n== interfaz ==');
 chk('motor cargado', typeof w.PhishTriage === 'object');
 console.log('  info  crypto.subtle disponible: ' + !!(w.crypto && w.crypto.subtle));
 
-d.querySelector('#btnSample').dispatchEvent(new w.Event('click'));
+// Ya no hay botón de ejemplo: se simula que el usuario suelta el fichero
+const fichero = new w.File([sample], 'ejemplo.eml', { type: 'message/rfc822' });
+const evento = new w.Event('drop', { bubbles: true });
+Object.defineProperty(evento, 'dataTransfer', { value: { files: [fichero] } });
+d.querySelector('#drop').dispatchEvent(evento);
 await waitFor(() => !d.querySelector('#result').hidden, 20000, 'el panel de resultados');
 await waitFor(() => d.querySelectorAll('#p-adjuntos .att-item').length === 2, 20000, 'los adjuntos');
 
@@ -125,7 +126,7 @@ chk('cambio de pestaña', d.querySelector('.panel[data-p="urls"]').classList.con
 
 d.querySelector('#btnReset').dispatchEvent(new w.Event('click'));
 chk('reset oculta el resultado', d.querySelector('#result').hidden === true);
-chk('reset deshabilita las descargas', d.querySelector('#btnJson').disabled === true);
+chk('reset deshabilita el botón', d.querySelector('#btnReset').disabled === true);
 
 console.log('\n' + ok + ' ok, ' + bad + ' fallos\n');
 process.exit(bad ? 1 : 0);

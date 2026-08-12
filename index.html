@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PhishTriage - analizador de .eml</title>
+<title>PhishTriage - análisis de correos sospechosos</title>
 <meta name="description" content="Analizador de correos .eml en el navegador: cabeceras, SPF/DKIM/DMARC, cadena Received, URLs defanged, hashes de adjuntos e IOCs. Sin subir nada a ningún servidor.">
 <meta name="color-scheme" content="dark">
 <link rel="stylesheet" href="assets/styles.css">
@@ -14,7 +14,7 @@
 <header class="top">
   <div class="wrap">
     <div class="logo">phish<span>triage</span></div>
-    <div class="tagline">Triaje de correos <code>.eml</code>: cabeceras, autenticación, cadena de saltos, URLs e IOCs.</div>
+    <div class="tagline">Análisis de correos sospechosos.</div>
     <span class="badge-offline" id="offlineBadge">100% en tu navegador</span>
   </div>
 </header>
@@ -29,11 +29,7 @@
   </div>
 
   <div class="toolbar">
-    <button id="btnSample">Cargar correo de ejemplo</button>
-    <button id="btnJson" disabled>Descargar JSON</button>
-    <button id="btnMd" disabled>Descargar informe .md</button>
-    <button id="btnIocs" disabled>Copiar IOCs</button>
-    <button id="btnReset" disabled>Limpiar</button>
+    <button id="btnReset" disabled>Analizar otro correo</button>
   </div>
 
   <details class="card" style="margin-top:14px">
