@@ -17,11 +17,5 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-
-      - name: Motor de analisis
-        run: node tests/run-tests.mjs
-
-      - name: Interfaz web
-        run: |
-          npm install --no-save jsdom
-          node tests/ui-test.mjs
+      - run: npm install --no-save jsdom
+      - run: node tests/test.mjs
