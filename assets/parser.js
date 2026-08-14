@@ -601,8 +601,14 @@
       const enCasa = propios.has(od);
       const flagsFinales = enCasa ? flags.filter(f => DEBILES.indexOf(f.id) < 0) : flags;
 
+      // Un enlace es donde el usuario puede pinchar. Una imagen o una fuente
+      // que carga la plantilla no lo es, y mezclarlas hacía que un boletín
+      // normal dijera "23 enlaces" cuando el usuario ve cuatro.
+      const PINCHABLES = ['html:a', 'html:form', 'html:refresh', 'text'];
+      const tipo = Array.from(entry.sources).some(x => PINCHABLES.indexOf(x) >= 0) ? 'enlace' : 'recurso';
+
       return {
-        url: p.url, defanged: defang(p.url), scheme: p.scheme, host, orgDomain: od, propio: enCasa,
+        url: p.url, defanged: defang(p.url), scheme: p.scheme, host, orgDomain: od, propio: enCasa, tipo,
         port: p.port, path: p.path.slice(0, 300), anchorTexts: texts,
         sources: Array.from(entry.sources), flags: flagsFinales
       };
@@ -1095,7 +1101,9 @@
         to: to.map(a => a.address), cc: cc.map(a => a.address),
         subject, date: dateHdr, messageId,
         originIP, hops: hops.length,
-        urlCount: urls.length, attachmentCount: attachments.length
+        urlCount: urls.filter(u => u.tipo === 'enlace').length,
+        resourceCount: urls.filter(u => u.tipo === 'recurso').length,
+        attachmentCount: attachments.length
       },
       auth: {
         spf: auth.spf, dkim: auth.dkim, dmarc: auth.dmarc, compauth: auth.compauth,

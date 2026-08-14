@@ -88,13 +88,13 @@
       ['spf', 'dkim', 'dmarc'].map(k =>
         '<span class="chip ' + cls(r.auth[k]) + '">' + k.toUpperCase() + ' <b>' + (r.auth[k] || 'n/d') + '</b></span>').join('') +
       '<span class="chip">saltos <b>' + r.received.length + '</b></span>' +
-      '<span class="chip">urls <b>' + r.urls.length + '</b></span>' +
+      '<span class="chip">enlaces <b>' + r.summary.urlCount + '</b></span>' +
       '<span class="chip">adj <b>' + r.attachments.length + '</b></span>';
 
     $('#nFind').textContent = r.findings.length;
     $('#nHead').textContent = r.headers.length;
     $('#nHops').textContent = r.received.length;
-    $('#nUrls').textContent = r.urls.length;
+    $('#nUrls').textContent = r.summary.urlCount;
     $('#nAtt').textContent = r.attachments.length;
 
     renderSimple(r); renderResumen(r); renderHallazgos(r); renderCabeceras(r); renderAuth(r);
@@ -223,7 +223,7 @@
       '<p class="muted" style="margin:0 0 12px">' + esc(sub) + '</p>' +
       '<table><tr><td class="k">Dice ser de</td><td class="v">' + quien + '</td></tr>' +
       '<tr><td class="k">Asunto</td><td class="v">' + esc(r.summary.subject || '(sin asunto)') + '</td></tr>' +
-      '<tr><td class="k">Enlaces / adjuntos</td><td class="v">' + r.urls.length + ' enlaces, ' +
+      '<tr><td class="k">Enlaces / adjuntos</td><td class="v">' + r.summary.urlCount + ' enlaces, ' +
       r.attachments.length + ' adjuntos</td></tr></table></div>' +
 
       (razones.length ? '<div class="card"><h3>Por que lo digo</h3>' +
@@ -357,18 +357,42 @@
       }).join('') + '</div>';
   }
 
+  // Un mismo destino repetido con distintos parámetros es un destino, no cinco
+  function agrupar(lista) {
+    const mapa = new Map();
+    for (const u of lista) {
+      const clave = u.scheme + '://' + u.host + u.path.split('?')[0];
+      if (!mapa.has(clave)) mapa.set(clave, Object.assign({}, u, { veces: 0 }));
+      mapa.get(clave).veces++;
+    }
+    return Array.from(mapa.values());
+  }
+
   function renderUrls(r) {
     if (!r.urls.length) { $('#p-urls').innerHTML = '<div class="card muted">No se han encontrado URLs.</div>'; return; }
-    const sorted = r.urls.slice().sort((a, b) => b.flags.length - a.flags.length);
-    $('#p-urls').innerHTML =
-      '<div class="toolbar" style="margin:0 0 12px"><button id="copyUrls">Copiar URLs defanged</button></div>' +
-      sorted.map(u =>
+    const pinta = u =>
         '<div class="url-item"><div class="u">' + esc(u.defanged) + '</div>' +
         '<div class="meta">host <b>' + esc(u.host) + '</b>' + (u.port ? ':' + esc(u.port) : '') +
-        ' &middot; org <b>' + esc(u.orgDomain) + '</b> &middot; origen ' + esc(u.sources.join(', ')) +
+        ' &middot; org <b>' + esc(u.orgDomain) + '</b>' + (u.propio ? ' <span class="pill good">del remitente</span>' : '') +
+        (u.veces > 1 ? ' &middot; <b>x' + u.veces + '</b>' : '') +
         (u.anchorTexts.length ? '<br>texto: ' + u.anchorTexts.map(t => '"' + esc(t) + '"').join(' / ') : '') + '</div>' +
         u.flags.map(f => '<div class="finding"><span class="sev sev-' + f.sev + '">' + SEVLABEL[f.sev] + '</span><span>' + esc(f.msg) + '</span></div>').join('') +
-        '</div>').join('');
+        '</div>';
+
+    const enlaces = agrupar(r.urls.filter(u => u.tipo === 'enlace')).sort((a, b) => b.flags.length - a.flags.length);
+    const recursos = agrupar(r.urls.filter(u => u.tipo === 'recurso')).sort((a, b) => b.flags.length - a.flags.length);
+
+    $('#p-urls').innerHTML =
+      '<div class="toolbar" style="margin:0 0 12px"><button id="copyUrls">Copiar todo defanged</button></div>' +
+      '<div class="card"><h3>Enlaces en los que se puede pinchar ' +
+      '<span class="muted">(' + enlaces.length + ' destinos distintos)</span></h3></div>' +
+      enlaces.map(pinta).join('') +
+      (recursos.length
+        ? '<details class="card"><summary style="cursor:pointer">Recursos que carga el correo solo: ' +
+          'imágenes, iconos y fuentes <span class="muted">(' + recursos.length + ' destinos)</span></summary>' +
+          '<p class="small">Aquí no se pincha. Se cargan al abrir el correo, y por eso sirven ' +
+          'para saber si lo has leído.</p></details>' + recursos.map(pinta).join('')
+        : '');
     const b = $('#copyUrls');
     if (b) b.onclick = () => copy(r.urls.map(u => u.defanged).join('\n'), b);
   }

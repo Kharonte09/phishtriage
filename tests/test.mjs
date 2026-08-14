@@ -167,6 +167,9 @@ check('"steamstatic" no se confunde con la marca "teams"',
   !tienda.findings.some(f => f.id === 'url-brand'));
 check('el texto oculto de plantilla no cuenta si el correo autentica',
   !tienda.findings.some(f => f.id === 'body-hidden'));
+check('las imágenes y las fuentes no se cuentan como enlaces',
+  tienda.summary.urlCount === 2 && tienda.summary.resourceCount === 2,
+  tienda.summary.urlCount + ' enlaces / ' + tienda.summary.resourceCount + ' recursos');
 
 console.log('\n== ponderación ==');
 const pesos = (() => {
@@ -234,6 +237,8 @@ if (!JSDOM) {
   check('el desglose de la nota se pinta', /reparte la nota/.test(d.querySelector('#p-hallazgos').textContent));
   check('los hashes llegan a la pantalla', /[0-9a-f]{64}/.test(d.querySelector('#p-adjuntos').textContent));
   // La importante: si esto falla, la web ejecutaría el phishing en vez de analizarlo
+  check('la pestaña de URLs separa enlaces de recursos',
+    /Enlaces en los que se puede pinchar/.test(d.querySelector('#p-urls').textContent));
   check('EL HTML DEL CORREO NO SE EJECUTA',
     d.querySelectorAll('#p-cuerpo form, #p-cuerpo input, #p-cuerpo script, #p-cuerpo img').length === 0);
 }
