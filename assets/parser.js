@@ -511,7 +511,11 @@
     return { url: s, scheme, host: host.toLowerCase(), port, userinfo, path: rest };
   }
 
-  function extractLinks(htmlText, plainText) {
+  // dominiosPropios: dominio del remitente y el que firma DKIM. Un enlace a la
+  // propia casa del remitente no es un indicio de nada, y era la mayor fuente
+  // de falsos positivos: cualquier boletín enlaza a su zona de cuenta.
+  function extractLinks(htmlText, plainText, dominiosPropios) {
+    const propios = new Set((dominiosPropios || []).filter(Boolean));
     const found = new Map(); // url -> {texts:Set, sources:Set}
     const add = (url, text, source) => {
       if (!url) return;
@@ -572,8 +576,11 @@
       if (CRED_WORDS.test(p.path)) flags.push({ id: 'url-creds', sev: 'medium', msg: 'Ruta con palabras de robo de credenciales' });
       if (p.scheme === 'http' && CRED_WORDS.test(p.path)) flags.push({ id: 'url-http', sev: 'medium', msg: 'Formulario sensible sobre HTTP sin cifrar' });
       if ((host.match(/\./g) || []).length >= 4) flags.push({ id: 'url-subdomains', sev: 'low', msg: 'Exceso de subdominios (' + host + ')' });
-      const brandHit = BRANDS.find(b => host.replace(/[^a-z0-9]/g, '').includes(b) && !od.split('.')[0].startsWith(b));
-      if (brandHit) flags.push({ id: 'url-brand', sev: 'high', msg: 'Marca "' + brandHit + '" en subdominio/ruta de un dominio ajeno' });
+      // Por tokens y no por subcadena: "steamstatic" contiene "teams" y
+      // "purchase" contiene "chase". Así solo cuenta la marca como palabra.
+      const tokens = host.split(/[.\-_]/).filter(Boolean);
+      const brandHit = BRANDS.find(b => tokens.includes(b) && !od.split('.')[0].startsWith(b));
+      if (brandHit) flags.push({ id: 'url-brand', sev: 'high', msg: 'Marca "' + brandHit + '" en subdominio de un dominio ajeno' });
       if (/^data:/i.test(p.url)) flags.push({ id: 'url-data', sev: 'high', msg: 'data: URI (HTML embebido)' });
       if (FILEHOSTS.has(host) || FILEHOSTS.has(od)) {
         flags.push({ id: 'url-filehost', sev: 'low', msg: 'Enlace a un servicio de archivos (' + host + '): comprueba que esperabas ese documento' });
@@ -588,10 +595,16 @@
           }
         }
       }
+      // En casa del remitente, los indicios débiles no cuentan
+      const DEBILES = ['url-creds', 'url-brand', 'url-tld', 'url-subdomains', 'url-http',
+        'url-port', 'url-redirector', 'url-filehost'];
+      const enCasa = propios.has(od);
+      const flagsFinales = enCasa ? flags.filter(f => DEBILES.indexOf(f.id) < 0) : flags;
+
       return {
-        url: p.url, defanged: defang(p.url), scheme: p.scheme, host, orgDomain: od,
+        url: p.url, defanged: defang(p.url), scheme: p.scheme, host, orgDomain: od, propio: enCasa,
         port: p.port, path: p.path.slice(0, 300), anchorTexts: texts,
-        sources: Array.from(entry.sources), flags
+        sources: Array.from(entry.sources), flags: flagsFinales
       };
     });
   }
@@ -856,7 +869,7 @@
     const plain = textParts.join('\n\n');
     const html = htmlParts.join('\n\n');
 
-    const urls = extractLinks(html, plain);
+    const urls = extractLinks(html, plain, [fromOrg, orgDomain(auth.dkimDomain || '')]);
     // Muchos correos solo traen HTML: si solo se mira el texto plano, la mitad
     // de las reglas de contenido no se enteran de nada.
     const textoVisible = (plain + ' ' + decodeEntities(html.replace(/<[^>]+>/g, ' ')))
@@ -983,7 +996,7 @@
       if (/<iframe\b/i.test(html)) push('body-iframe', 'iframe embebido');
       if (/http-equiv\s*=\s*["']?refresh/i.test(html)) push('body-refresh', 'meta refresh: redirección automatica');
       const invisible = html.match(/(font-size\s*:\s*0|display\s*:\s*none|visibility\s*:\s*hidden|color\s*:\s*#?f{3,6}\b)/gi);
-      if (invisible && invisible.length >= 2) push('body-hidden', 'Texto oculto/invisible (' + invisible.length + ' ocurrencias): evasión de filtros');
+      if (invisible && invisible.length >= 2 && S(auth.dmarc) !== 'pass') push('body-hidden', 'Texto oculto/invisible (' + invisible.length + ' ocurrencias): evasión de filtros');
       const textLen = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().length;
       const imgs = (html.match(/<img\b/gi) || []).length;
       if (imgs > 0 && textLen < 120) push('body-image', 'Correo casi solo imagen (' + imgs + ' img, ' + textLen + ' chars): evasión de análisis textual');

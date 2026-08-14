@@ -102,6 +102,28 @@ const BANCO = [
   '<html><body><p><a href="https://www.bbva.es/personas/operaciones.html">Revisar en la app</a></p></body></html>', ''
 ].join('\r\n');
 
+// Boletín real de Steam. Sacaba 45/100 por dos motivos absurdos: el texto
+// oculto que usan TODAS las plantillas de correo comercial, y que "steamstatic"
+// contiene "teams" como subcadena.
+const TIENDA = [
+  'Authentication-Results: mx.corp.es; spf=pass smtp.mailfrom=steampowered.com;',
+  ' dkim=pass header.d=steampowered.com; dmarc=pass header.from=steampowered.com',
+  'Received: from mail.steampowered.com (mail.steampowered.com [208.64.202.36])',
+  ' by mx.corp.es with ESMTPS id A1; Mon, 10 Aug 2026 09:00:00 +0200',
+  'From: Steam <noreply@steampowered.com>', 'To: maria@corp.es',
+  'Subject: Un juego de tu lista de deseados ya esta disponible',
+  'Message-ID: <s1@steampowered.com>', 'Date: Mon, 10 Aug 2026 09:00:00 +0200',
+  'Content-Type: text/html; charset="utf-8"', '',
+  '<html><body>',
+  '<div style="display:none;font-size:0;max-height:0;color:#ffffff">Ya disponible</div>',
+  '<div style="display:none;font-size:0">preheader</div>',
+  '<img src="https://cdn.akamai.steamstatic.com/store/email/logo.png">',
+  '<img src="https://shared.akamai.steamstatic.com/store_item_assets/apps/374.jpg">',
+  '<p><a href="https://store.steampowered.com/app/374/">Ver en la tienda</a></p>',
+  '<p><a href="https://store.steampowered.com/account/notificationsettings?token=18ca">Ajustes de notificaciones</a></p>',
+  '</body></html>', ''
+].join('\r\n');
+
 // --- motor -------------------------------------------------------------------
 console.log('\n== motor ==');
 const r = await analizar(PHISHING, 'phishing.eml');
@@ -135,6 +157,16 @@ check('el fraude del jefe (sin enlaces ni adjuntos) llega a ALTO',
 check('y lo identifica como tal', bec.findings.some(f => f.id === 'combo-bec'));
 check('un aviso real del banco, alarmista pero legítimo, se queda en BAJO',
   banco.verdict === 'BAJO', banco.verdict + ' ' + banco.score + ' ' + banco.findings.map(f => f.id));
+
+const tienda = await analizar(TIENDA, 'tienda.eml');
+check('un boletín real de una tienda se queda en BAJO',
+  tienda.verdict === 'BAJO', tienda.verdict + ' ' + tienda.score + ' ' + tienda.findings.map(f => f.id));
+check('los enlaces a la casa del propio remitente no cuentan como indicio',
+  !tienda.findings.some(f => f.id === 'url-creds'));
+check('"steamstatic" no se confunde con la marca "teams"',
+  !tienda.findings.some(f => f.id === 'url-brand'));
+check('el texto oculto de plantilla no cuenta si el correo autentica',
+  !tienda.findings.some(f => f.id === 'body-hidden'));
 
 console.log('\n== ponderación ==');
 const pesos = (() => {
