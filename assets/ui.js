@@ -115,12 +115,8 @@
   // --- Vista para gente que no es de esto -------------------------------------
   // Traduce los ids de hallazgo a frases que entienda cualquiera.
   const EN_CRISTIANO = {
-    'dkim-absent': 'El correo no viene firmado por el dominio del que dice venir.',
-    'compauth': 'El propio filtro de Microsoft ya lo marcó como autenticación dudosa.',
-    'mid-mismatch': 'El identificador interno del correo lo generó un dominio distinto.',
     'url-tld': 'Hay enlaces a dominios del tipo que usan casi siempre los fraudes.',
     'url-http': 'Un enlace pide datos por una conexión sin cifrar.',
-    'url-port': 'Un enlace usa un puerto raro, cosa de servidores montados a mano.',
     'url-creds': 'Hay enlaces que llevan a páginas de "inicio de sesión" o "verificar cuenta".',
     'replyto-freemail': 'Si respondes, la respuesta se va a otra cuenta distinta de la que escribe.',
     'from-freemail-cargo': 'Dice ser un cargo de una empresa pero escribe desde un correo gratuito tipo Gmail.',
@@ -170,19 +166,19 @@
   const CONSEJOS = {
     CRITICO: ['No pulses ningún enlace ni abras los adjuntos.',
       'No respondas ni llames a los teléfonos que aparezcan en el correo.',
-      'Si ya pusiste tu contraseña en algún sitio, cambiala YA desde otra pestaña entrando tu a la web oficial, y activa la verificación en dos pasos.',
+      'Si ya pusiste tu contraseña en algún sitio, cámbiala YA desde otra pestaña entrando tu a la web oficial, y activa la verificación en dos pasos.',
       'Si dice ser tu banco, tu empresa o la administracion, llama al teléfono que aparece en su web oficial o en el reverso de tu tarjeta, nunca al del correo.',
       'Reenvialo a tu departamento de seguridad o denuncialo, y después borralo.'],
     ALTO: ['No pulses ningún enlace ni abras los adjuntos.',
       'No respondas al correo.',
-      'Verifica por otro canal: entra tu a la web oficial escribiendo la dirección a mano, o llama al teléfono de siempre.',
+      'Verifica por otro canal: entra tú a la web oficial escribiendo la dirección a mano, o llama al teléfono de siempre.',
       'Si te lo esperabas de verdad, pregunta al remitente por otra via antes de tocar nada.'],
     MEDIO: ['Trata el correo con desconfianza: no pulses enlaces ni abras adjuntos por ahora.',
       'Confirma por otro canal que el remitente te ha escrito de verdad.',
       'Si te pide dinero, datos personales o una contraseña, da por hecho que es fraude hasta que lo confirmes.'],
-    BAJO: ['No he visto indicios claros de fraude, pero esto no es una garantia.',
-      'Si el correo te pide dinero, contraseñas o datos personales, verificalo igualmente por otro canal.',
-      'Ante la duda, no pulses el enlace: entra tu a la web escribiendo la dirección a mano.']
+    BAJO: ['No he visto indicios claros de fraude, pero esto no es una garantía.',
+      'Si el correo te pide dinero, contraseñas o datos personales, verifícalo igualmente por otro canal.',
+      'Ante la duda, no pulses el enlace: entra tú a la web escribiendo la dirección a mano.']
   };
 
   const TITULARES = {
@@ -196,6 +192,25 @@
   const vtFile = h => 'https://www.virustotal.com/gui/file/' + encodeURIComponent(h);
   const abuseIp = ip => 'https://www.abuseipdb.com/check/' + encodeURIComponent(ip);
 
+  // Alias de reenvío: la dirección real está oculta a propósito y no dice nada
+  const RELAYS = {
+    'privaterelay.appleid.com': 'un alias de «Ocultar mi correo» de Apple',
+    'duck.com': 'un alias de DuckDuckGo',
+    'mozmail.com': 'un alias de Firefox Relay',
+    'simplelogin.co': 'un alias de SimpleLogin',
+    'anonaddy.me': 'un alias de AnonAddy'
+  };
+
+  // "noreply_at_confirmation_onlinesoccermanager_com_hsmv...@x.com" no lo lee nadie
+  function direccionCorta(addr) {
+    if (!addr) return '?';
+    const i = addr.lastIndexOf('@');
+    if (i < 0) return addr;
+    const local = addr.slice(0, i), dominio = addr.slice(i + 1);
+    const cortada = local.length > 22 ? local.slice(0, 20) + '…' : local;
+    return esc(cortada) + '@<b>' + esc(dominio) + '</b>';
+  }
+
   function renderSimple(r) {
     const [titulo, sub] = TITULARES[r.verdict];
     const vistos = [];
@@ -203,56 +218,63 @@
       const txt = EN_CRISTIANO[f.id];
       if (txt && vistos.indexOf(txt) < 0) vistos.push(txt);
     }
-    const razones = vistos.slice(0, 8);
+    const razones = vistos.slice(0, 5);
 
-    const quien = r.summary.fromDisplay
-      ? '<b>' + esc(r.summary.fromDisplay) + '</b> pero la dirección real es <code>' + esc(r.summary.from || '?') + '</code>'
-      : '<code>' + esc(r.summary.from || '?') + '</code>';
+    const relay = RELAYS[r.summary.fromOrgDomain];
+    const quien = '<code>' + direccionCorta(r.summary.from) + '</code>' +
+      (relay ? '<div class="small">Es ' + relay + ': la dirección de verdad está oculta.</div>' : '');
 
     // Comprobaciones de un clic: no hacen falta claves de API, abren la web pública.
     const comprobar = [];
     for (const a of r.attachments) {
       if (a.sha256) comprobar.push(['Adjunto: ' + a.filename, vtFile(a.sha256), 'VirusTotal']);
     }
-    for (const d of r.iocs.domains.slice(0, 8)) comprobar.push(['Dominio: ' + d, vtSearch(d), 'VirusTotal']);
-    for (const ip of r.iocs.ips.slice(0, 5)) comprobar.push(['Servidor: ' + ip, abuseIp(ip), 'AbuseIPDB']);
+    // Solo los dominios de enlaces pinchables que NO son del propio remitente:
+    // ofrecerle diez botones, la mitad de CDNs, no ayuda a nadie.
+    const dominiosUtiles = [...new Set(r.urls
+      .filter(u => u.tipo === 'enlace' && !u.propio && u.orgDomain)
+      .map(u => u.orgDomain))].slice(0, 6);
+    for (const d of dominiosUtiles) comprobar.push(['Dominio: ' + d, vtSearch(d), 'VirusTotal']);
+    if (r.summary.originIP) comprobar.push(['Servidor de origen: ' + r.summary.originIP, abuseIp(r.summary.originIP), 'AbuseIPDB']);
 
     $('#p-simple').innerHTML =
       '<div class="card">' +
       '<h2 class="v-' + r.verdict + '" style="margin:0 0 4px;font-size:22px">' + esc(titulo) + '</h2>' +
       '<p class="muted" style="margin:0 0 12px">' + esc(sub) + '</p>' +
-      '<table><tr><td class="k">Dice ser de</td><td class="v">' + quien + '</td></tr>' +
+      '<table><tr><td class="k">Dice ser</td><td class="v">' +
+      (r.summary.fromDisplay ? '<b>' + esc(r.summary.fromDisplay) + '</b>' : '<span class="muted">sin nombre</span>') +
+      '</td></tr>' +
+      '<tr><td class="k">Escribe desde</td><td class="v">' + quien + '</td></tr>' +
       '<tr><td class="k">Asunto</td><td class="v">' + esc(r.summary.subject || '(sin asunto)') + '</td></tr>' +
-      '<tr><td class="k">Enlaces / adjuntos</td><td class="v">' + r.summary.urlCount + ' enlaces, ' +
-      r.attachments.length + ' adjuntos</td></tr></table></div>' +
+      '</table></div>' +
 
       (razones.length ? '<div class="card"><h3>Por que lo digo</h3>' +
         razones.map(t => '<div class="finding"><span class="sev sev-' +
           (r.verdict === 'BAJO' ? 'info' : 'high') + '">&#9679;</span><span>' + esc(t) + '</span></div>').join('') +
         '</div>' : '') +
 
-      '<div class="card"><h3>Que hacer ahora</h3><ol style="margin:0;padding-left:20px">' +
+      '<div class="card"><h3>Qué hacer ahora</h3><ol style="margin:0;padding-left:20px">' +
       CONSEJOS[r.verdict].map(c => '<li style="margin-bottom:6px">' + esc(c) + '</li>').join('') +
       '</ol></div>' +
 
       (comprobar.length ? '<div class="card"><h3>Comprobar en servicios públicos <span class="muted">(sin registrarte)</span></h3>' +
-        '<p class="small">Cada boton abre una pestaña nueva con la ficha pública de ese dato. Si sale en rojo, ' +
+        '<p class="small">Cada botón abre una pestaña nueva con la ficha pública de ese dato. Si sale en rojo, ' +
         'es que ya lo han denunciado otros.</p>' +
         '<div class="chips">' + comprobar.map(([label, url, svc]) =>
           '<a class="btn" target="_blank" rel="noopener noreferrer" href="' + esc(url) + '">' +
           esc(label.length > 46 ? label.slice(0, 46) + '...' : label) + ' &rarr; ' + svc + '</a>').join('') +
         '</div>' +
-        '<p class="small" style="margin-top:10px">Ojo: al abrirlos le estas contando a esos servicios que has ' +
-        'recibido este correo. Para un correo normal da igual; si estas investigando un ataque dirigido, mejor no.</p>' +
+        '<p class="small" style="margin-top:10px">Ojo: al abrirlos le estás contando a esos servicios que has ' +
+        'recibido este correo. Para un correo normal da igual; si estás investigando un ataque dirigido, mejor no.</p>' +
         '</div>' : '') +
 
       '<div class="card"><h3>Denunciarlo (España)</h3><p class="small">' +
       'INCIBE atiende dudas de ciberseguridad en el <b>017</b>, gratuito y confidencial. ' +
-      'Si ha habido perdida de dinero o de datos, se denuncia ante Policia Nacional o Guardia Civil. ' +
-      'Si es un correo de tu empresa, reenvialo a tu equipo de seguridad <b>como adjunto</b> ' +
+      'Si ha habido pérdida de dinero o de datos, se denuncia ante Policía Nacional o Guardia Civil. ' +
+      'Si es un correo de tu empresa, reenvíalo a tu equipo de seguridad <b>como adjunto</b> ' +
       '(así conserva las cabeceras) antes de borrarlo.</p></div>' +
 
-      '<p class="small">Esto es un análisis automatico y orientativo: acierta con los fraudes de manual, ' +
+      '<p class="small">Esto es un análisis automático y orientativo: acierta con los fraudes de manual, ' +
       'pero ni detecta todo ni acierta siempre. En las otras pestañas tienes el detalle técnico completo.</p>';
   }
 
