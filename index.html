@@ -22,9 +22,9 @@
 <main class="wrap">
 
   <div id="drop">
-    <h2>Suelta aquí un fichero .eml / .msg-exportado</h2>
-    <p>o haz clic para elegirlo. También puedes pegar el correo en bruto con <b>Ctrl+V</b>.</p>
-    <p class="hint muted">El fichero no sale de tu equipo: todo el parseo ocurre en esta pestaña.</p>
+    <h2>Arrastra aquí el correo</h2>
+    <p>O haz clic para buscarlo. También puedes copiarlo y pegarlo con <b>Ctrl+V</b>.</p>
+    <p class="hint muted">No se sube a ningún sitio. Se abre aquí, en tu ordenador.</p>
     <input type="file" id="file" accept=".eml,.txt,message/rfc822" multiple hidden>
   </div>
 
@@ -33,21 +33,16 @@
   </div>
 
   <details class="card" style="margin-top:14px">
-    <summary style="cursor:pointer">&iquest;Y c&oacute;mo consigo el fichero <code>.eml</code> de un correo?</summary>
+    <summary style="cursor:pointer">&iquest;C&oacute;mo saco el correo de mi programa?</summary>
     <table style="margin-top:10px">
-      <tr><td class="k">Gmail (web)</td><td class="v">Abre el correo &rarr; men&uacute; <b>&#8942;</b> arriba a la derecha del mensaje &rarr;
-        <b>Descargar mensaje</b>. Te baja un <code>.eml</code>.</td></tr>
-      <tr><td class="k">Outlook (escritorio)</td><td class="v">Arrastra el correo desde la lista hasta el escritorio, o
-        <b>Archivo &rarr; Guardar como</b> y elige formato <b>.eml</b>.</td></tr>
-      <tr><td class="k">Outlook (web)</td><td class="v">Abre el correo en ventana nueva &rarr; <b>&#8942;</b> &rarr;
-        <b>Guardar como</b>.</td></tr>
-      <tr><td class="k">Apple Mail</td><td class="v">Arrastra el correo a una carpeta del Finder.</td></tr>
-      <tr><td class="k">Thunderbird</td><td class="v">Clic derecho en el correo &rarr; <b>Guardar como &rarr; Archivo</b>.</td></tr>
-      <tr><td class="k">Sin descargar nada</td><td class="v">Abre el <b>mensaje original</b> / <b>ver c&oacute;digo fuente</b>,
-        selecciona todo el texto, c&oacute;pialo y p&eacute;galo aqu&iacute; con <b>Ctrl+V</b>.</td></tr>
+      <tr><td class="k">Gmail</td><td class="v">Abre el correo &rarr; men&uacute; <b>&#8942;</b> &rarr; <b>Descargar mensaje</b>.</td></tr>
+      <tr><td class="k">Outlook (programa)</td><td class="v">Arrastra el correo al escritorio.</td></tr>
+      <tr><td class="k">Outlook (web)</td><td class="v">Abre el correo en otra ventana &rarr; <b>&#8942;</b> &rarr; <b>Guardar como</b>.</td></tr>
+      <tr><td class="k">Apple Mail</td><td class="v">Arrastra el correo a una carpeta.</td></tr>
+      <tr><td class="k">Thunderbird</td><td class="v">Clic derecho &rarr; <b>Guardar como &rarr; Archivo</b>.</td></tr>
+      <tr><td class="k">Si no te aclaras</td><td class="v">Busca <b>mensaje original</b> o <b>ver c&oacute;digo fuente</b>,
+        selecciona todo, c&oacute;pialo y p&eacute;galo aqu&iacute; con <b>Ctrl+V</b>.</td></tr>
     </table>
-    <p class="small">Importante: el fichero se analiza dentro de tu navegador. No se sube a ning&uacute;n servidor,
-      ni al m&iacute;o ni a otro.</p>
   </details>
 
   <div id="result" hidden>
@@ -66,37 +61,49 @@
       <div class="chips" id="authChips"></div>
     </div>
 
-    <nav class="tabs" id="tabs">
-      <button data-p="simple" class="active">&iquest;Qu&eacute; hago?</button>
-      <button data-p="resumen">Resumen</button>
-      <button data-p="hallazgos">Hallazgos <span class="n" id="nFind"></span></button>
-      <button data-p="cabeceras">Cabeceras <span class="n" id="nHead"></span></button>
-      <button data-p="auth">Autenticación</button>
-      <button data-p="received">Received <span class="n" id="nHops"></span></button>
-      <button data-p="urls">URLs <span class="n" id="nUrls"></span></button>
-      <button data-p="adjuntos">Adjuntos <span class="n" id="nAtt"></span></button>
-      <button data-p="cuerpo">Cuerpo</button>
-      <button data-p="iocs">IOCs</button>
-      <button data-p="json">JSON</button>
-    </nav>
+    <!-- Lo que ve todo el mundo. Nunca se oculta. -->
+    <section id="p-simple" class="simple-view"></section>
 
-    <section class="panel active" data-p="simple" id="p-simple"></section>
-    <section class="panel" data-p="resumen" id="p-resumen"></section>
-    <section class="panel" data-p="hallazgos" id="p-hallazgos"></section>
-    <section class="panel" data-p="cabeceras" id="p-cabeceras"></section>
-    <section class="panel" data-p="auth" id="p-auth"></section>
-    <section class="panel" data-p="received" id="p-received"></section>
-    <section class="panel" data-p="urls" id="p-urls"></section>
-    <section class="panel" data-p="adjuntos" id="p-adjuntos"></section>
-    <section class="panel" data-p="cuerpo" id="p-cuerpo"></section>
-    <section class="panel" data-p="iocs" id="p-iocs"></section>
-    <section class="panel" data-p="json" id="p-json"></section>
+    <div class="adv-bar">
+      <button id="btnAdv" class="adv-toggle" aria-expanded="false" aria-controls="advanced">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+        <span id="btnAdvTxt">Ver detalle t&eacute;cnico</span>
+      </button>
+      <span class="small muted">Cabeceras, enlaces, adjuntos&hellip; Solo si sabes lo que buscas.</span>
+    </div>
+
+    <div id="advanced" hidden>
+      <nav class="tabs" id="tabs">
+        <button data-p="resumen" class="active">Resumen</button>
+        <button data-p="hallazgos">Hallazgos <span class="n" id="nFind"></span></button>
+        <button data-p="cabeceras">Cabeceras <span class="n" id="nHead"></span></button>
+        <button data-p="auth">Autenticación</button>
+        <button data-p="received">Received <span class="n" id="nHops"></span></button>
+        <button data-p="urls">URLs <span class="n" id="nUrls"></span></button>
+        <button data-p="adjuntos">Adjuntos <span class="n" id="nAtt"></span></button>
+        <button data-p="cuerpo">Cuerpo</button>
+        <button data-p="iocs">IOCs</button>
+        <button data-p="json">JSON</button>
+      </nav>
+
+      <section class="panel active" data-p="resumen" id="p-resumen"></section>
+      <section class="panel" data-p="hallazgos" id="p-hallazgos"></section>
+      <section class="panel" data-p="cabeceras" id="p-cabeceras"></section>
+      <section class="panel" data-p="auth" id="p-auth"></section>
+      <section class="panel" data-p="received" id="p-received"></section>
+      <section class="panel" data-p="urls" id="p-urls"></section>
+      <section class="panel" data-p="adjuntos" id="p-adjuntos"></section>
+      <section class="panel" data-p="cuerpo" id="p-cuerpo"></section>
+      <section class="panel" data-p="iocs" id="p-iocs"></section>
+      <section class="panel" data-p="json" id="p-json"></section>
+    </div>
   </div>
 
   <div id="multi" hidden></div>
 
   <footer>
-    PhishTriage - análisis heurístico, no un veredicto definitivo. Verifica siempre a mano antes de bloquear o denunciar.
+    PhishTriage &middot; Lo analiza un programa, no una persona. Comprueba siempre por tu cuenta antes de dar algo por seguro.
     &middot; <a href="https://github.com/Kharonte09/phishtriage" target="_blank" rel="noopener noreferrer">código fuente</a>
   </footer>
 </main>

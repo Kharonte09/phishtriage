@@ -90,6 +90,19 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .chip.fail { border-color: #6b2530; color: var(--high); }
 .chip.warn { border-color: #6b4d1e; color: var(--med); }
 
+/* Vista sencilla: siempre visible, nunca detrás de una pestaña ----------- */
+.simple-view { padding-top: 18px; }
+
+/* Botón de detalle técnico ----------------------------------------------- */
+.adv-bar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--line);
+}
+.adv-toggle { display: inline-flex; align-items: center; gap: 9px; font-size: 13px; }
+.adv-toggle svg { width: 13px; height: 13px; flex: none; transition: transform .18s ease; }
+.adv-toggle[aria-expanded="true"] svg { transform: rotate(90deg); }
+.adv-bar .small { flex: 1; min-width: 200px; }
+
 /* Tabs ------------------------------------------------------------------- */
 .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin: 22px 0 0; overflow-x: auto; }
 .tabs button {

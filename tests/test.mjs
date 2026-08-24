@@ -9,9 +9,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
-const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+// fileURLToPath y no new URL().pathname: en Windows ese pathname es /C:/... y
+// path.resolve lo toma como raíz de unidad, dejando C:\C:\...
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PT = require(path.join(ROOT, 'assets/parser.js'));
 
 let ok = 0, mal = 0;
@@ -228,12 +231,26 @@ if (!JSDOM) {
 
   check('la interfaz pinta el resultado', !d.querySelector('#result').hidden);
   check('el veredicto sale en pantalla', /CRITICO/.test(d.querySelector('#verdictTitle').textContent));
-  check('la vista sencilla es la primera', d.querySelector('.panel[data-p="simple"]').classList.contains('active'));
+  check('la vista sencilla se ve sin tocar nada', !!d.querySelector('#p-simple').textContent.trim());
+  check('y no queda encerrada en el detalle',
+    !d.querySelector('#advanced').contains(d.querySelector('#p-simple')));
   check('con consejos accionables', d.querySelectorAll('#p-simple ol li').length >= 3);
-  check('y con enlaces a VirusTotal / AbuseIPDB',
-    d.querySelectorAll('#p-simple a[href*="virustotal.com"], #p-simple a[href*="abuseipdb.com"]').length > 0);
-  check('los enlaces no filtran de dónde vienen',
-    Array.from(d.querySelectorAll('#p-simple a')).every(a => /noreferrer/.test(a.getAttribute('rel') || '')));
+
+  // El detalle tecnico esta detras del boton: quien no sepa, no se lo encuentra
+  const adv = d.querySelector('#advanced'), btnAdv = d.querySelector('#btnAdv');
+  check('el detalle tecnico arranca oculto', adv.hidden === true);
+  check('y el boton lo anuncia', btnAdv.getAttribute('aria-expanded') === 'false');
+  btnAdv.click();
+  check('el boton lo despliega', adv.hidden === false && btnAdv.getAttribute('aria-expanded') === 'true');
+  btnAdv.click();
+  check('y lo vuelve a ocultar', adv.hidden === true);
+  btnAdv.click();  // se deja abierto para poder mirar dentro
+
+  check('VirusTotal / AbuseIPDB viven en el detalle, no en la vista de todos',
+    d.querySelectorAll('#p-resumen a[href*="virustotal.com"], #p-resumen a[href*="abuseipdb.com"]').length > 0 &&
+    d.querySelectorAll('#p-simple a[href*="virustotal.com"], #p-simple a[href*="abuseipdb.com"]').length === 0);
+  check('los enlaces no filtran de donde vienen',
+    Array.from(d.querySelectorAll('#result a[target="_blank"]')).every(a => /noreferrer/.test(a.getAttribute('rel') || '')));
   check('el desglose de la nota se pinta', /reparte la nota/.test(d.querySelector('#p-hallazgos').textContent));
   check('los hashes llegan a la pantalla', /[0-9a-f]{64}/.test(d.querySelector('#p-adjuntos').textContent));
   // La importante: si esto falla, la web ejecutaría el phishing en vez de analizarlo
