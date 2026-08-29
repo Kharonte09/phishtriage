@@ -12,8 +12,6 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
-// fileURLToPath y no new URL().pathname: en Windows ese pathname es /C:/... y
-// path.resolve lo toma como raíz de unidad, dejando C:\C:\...
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PT = require(path.join(ROOT, 'assets/parser.js'));
 
@@ -23,7 +21,6 @@ const check = (n, c, extra) => c
   : (mal++, console.log('  FALLA ' + n + (extra ? '  -> ' + extra : '')));
 const analizar = (txt, nombre) => PT.analyze(PT.bytesToLatin1(new TextEncoder().encode(txt)), { filename: nombre });
 
-// --- correo de phishing sintético (inofensivo: los adjuntos son texto) -------
 const HTML = '<html><body><p><b>Su cuenta ser&aacute; suspendida en 24 horas.</b></p>'
   + '<p><a href="http://microsoft-login.verify-account.tk/o365/login.php">https://login.microsoftonline.com</a></p>'
   + '<p><a href="http://185.199.110.153:8080/update">Revisar</a></p>'
@@ -105,9 +102,6 @@ const BANCO = [
   '<html><body><p><a href="https://www.bbva.es/personas/operaciones.html">Revisar en la app</a></p></body></html>', ''
 ].join('\r\n');
 
-// Boletín real de Steam. Sacaba 45/100 por dos motivos absurdos: el texto
-// oculto que usan TODAS las plantillas de correo comercial, y que "steamstatic"
-// contiene "teams" como subcadena.
 const TIENDA = [
   'Authentication-Results: mx.corp.es; spf=pass smtp.mailfrom=steampowered.com;',
   ' dkim=pass header.d=steampowered.com; dmarc=pass header.from=steampowered.com',
@@ -127,7 +121,6 @@ const TIENDA = [
   '</body></html>', ''
 ].join('\r\n');
 
-// --- motor -------------------------------------------------------------------
 console.log('\n== motor ==');
 const r = await analizar(PHISHING, 'phishing.eml');
 const n = await analizar(BOLETIN, 'boletin.eml');
@@ -150,7 +143,7 @@ check('detecta el enlace a una IP', ids.includes('url-ip'));
 check('detecta el adjunto con macros', ids.includes('att-macro'));
 check('detecta la doble extensión', ids.includes('att-double'));
 check('detecta el campo de contraseña', ids.includes('body-password'));
-check('detecta el remitente suplantado', ids.includes('dn-brand'));
+check('detecta el dominio que imita a la marca', ids.includes('from-lookalike'));
 
 console.log('\n== casos difíciles ==');
 const bec = await analizar(BEC, 'bec.eml');
@@ -202,11 +195,7 @@ check('cada regla que dispara tiene su peso',
   ids.filter(i => !i.startsWith('combo-') && !pesos.has(i)).join());
 
 
-// --- correo legitimo que la primera version suspendia -----------------------
-// Los cuatro salian MEDIO por motivos que no tenian nada que ver con el fraude.
 
-// Boletin normal mandado por un proveedor de envio masivo. El Return-Path es
-// del proveedor, como en todo el correo comercial del mundo. Sacaba 43.
 const ESP = [
   'Authentication-Results: mx.corp.es; spf=pass smtp.mailfrom=mail112.suw15.mcsv.net;',
   ' dkim=pass header.d=marca.com; dmarc=pass header.from=marca.com',
@@ -223,8 +212,6 @@ const ESP = [
   '</body></html>', ''
 ].join('\r\n');
 
-// Lista de correo: el reenvio rompe SPF y DKIM y por tanto DMARC, pero la
-// cadena ARC da fe de que en origen autenticaba. Sacaba 48, casi ALTO.
 const LISTA = [
   'ARC-Seal: i=1; a=rsa-sha256; d=lista.org; s=arc; b=abc',
   'ARC-Authentication-Results: i=1; lista.org; spf=pass smtp.mailfrom=autor.com;',
@@ -239,8 +226,6 @@ const LISTA = [
   'Content-Type: text/plain; charset="utf-8"', '', 'Adjunto el acta de la reunion de ayer.', ''
 ].join('\r\n');
 
-// Correo corriente que paso por un servidor que no sella Authentication-Results.
-// Sacaba 29 solo por lo que le faltaba a las cabeceras.
 const SINAR = [
   'Received: from mx.proveedor.es (mx.proveedor.es [81.44.1.10]) by mx.corp.es',
   ' with ESMTPS id A1; Mon, 10 Aug 2026 09:00:00 +0200',
@@ -249,8 +234,6 @@ const SINAR = [
   'Content-Type: text/plain; charset="utf-8"', '', 'Te adjunto el presupuesto. Un saludo.', ''
 ].join('\r\n');
 
-// Nombre polaco corriente. El regex de homoglifos cazaba Latin Extended-A,
-// donde viven la ł, la ć y la š: sacaba 15 por llamarse Michał.
 const ESLAVO = [
   'Authentication-Results: mx.corp.es; spf=pass smtp.mailfrom=firma.pl;',
   ' dkim=pass header.d=firma.pl; dmarc=pass header.from=firma.pl',
@@ -261,7 +244,6 @@ const ESLAVO = [
   'Content-Type: text/plain; charset="utf-8"', '', 'Buenos dias, le paso la oferta.', ''
 ].join('\r\n');
 
-// Y el homoglifo de verdad: una "а" cirilica dentro de "paypal".
 const HOMOGLIFO = [
   'Authentication-Results: mx.corp.es; spf=fail smtp.mailfrom=evil.com; dkim=none;',
   ' dmarc=fail header.from=evil.com',
@@ -304,9 +286,6 @@ console.log('\n== robustez ==');
 const roto = await analizar('From: a@b.com\r\nSubject: x\r\nContent-Type: text/html\r\n\r\n<p>&#x110000;</p>\r\n', 'roto.eml');
 check('una entidad HTML fuera de rango no tumba el analisis', roto.verdict === 'BAJO');
 
-// Lo peor que puede hacer esto es contestar BAJO -verde, tranquilizador- sobre
-// un fichero que no ha sabido leer. Cualquier cosa que no sea un correo tiene
-// que decirlo, no puntuarla.
 const noSonCorreos = {
   'un PDF': '%PDF-1.7\n1 0 obj<</Type/Catalog>>endobj',
   'un ZIP o un .docx': 'PK\x03\x04\x14\x00\x00\x00\x08\x00basura',
@@ -322,8 +301,6 @@ for (const [queEs, contenido] of Object.entries(noSonCorreos)) {
   check('no da un veredicto sobre ' + queEs + ': avisa', !!aviso, aviso || 'devolvio una nota');
 }
 
-// Un adjunto colgado muy hondo tiene que seguir viendose: si el analisis se
-// para antes de llegar, el .exe desaparece y la nota baja a BAJO.
 const hondo = (prof) => {
   let c = 'Content-Type: application/x-msdownload; name="factura.exe"\r\n' +
     'Content-Disposition: attachment; filename="factura.exe"\r\n\r\nMZ...\r\n';
@@ -350,8 +327,6 @@ const conFuente = (() => {
 })();
 check('todas las reglas declaran de donde sale su peso',
   conFuente.length === pesos.size, conFuente.length + ' de ' + pesos.size);
-// Los pesos salen de medir el motor contra corpus reales. Las que no tienen
-// medida son las que el corpus no cubre, y van declaradas como tal.
 const medidas = conFuente.filter(r => /^LR /.test(r.fuente));
 const sinMedir = conFuente.filter(r => r.pts > 0 && !/^LR /.test(r.fuente));
 check('la mayoria de los pesos sale de una medida, no de mi criterio',
@@ -374,7 +349,6 @@ const frases = new Set(Array.from(bloqueUI.slice(0, bloqueUI.indexOf('\n  };'))
 const mudas = conFuente.filter(r => r.pts > 0 && !frases.has(r.id)).map(r => r.id);
 check('toda regla que suma tiene su frase en castellano llano', mudas.length === 0, mudas.join(' '));
 
-// --- interfaz (solo si hay jsdom) --------------------------------------------
 let JSDOM;
 try { ({ JSDOM } = require('jsdom')); } catch (e) { /* opcional */ }
 
@@ -397,8 +371,6 @@ if (!JSDOM) {
     d.body.appendChild(s);
   }
 
-  // Se simula que el usuario suelta el fichero. Un objeto con name y
-  // arrayBuffer() basta y evita depender de la versión de jsdom.
   const bytes = new TextEncoder().encode(PHISHING);
   const ev = new w.Event('drop', { bubbles: true });
   Object.defineProperty(ev, 'dataTransfer', {
@@ -412,7 +384,6 @@ if (!JSDOM) {
   }
 
   check('la interfaz pinta el resultado', !d.querySelector('#result').hidden);
-  // El titular va en cristiano; la etiqueta tecnica queda debajo, en pequeño
   check('el veredicto se lee sin saber de esto',
     /estafa/i.test(d.querySelector('#verdictTitle').textContent),
     d.querySelector('#verdictTitle').textContent);
@@ -428,7 +399,6 @@ if (!JSDOM) {
     !d.querySelector('#advanced').contains(d.querySelector('#p-simple')));
   check('con consejos accionables', d.querySelectorAll('#p-simple ol li').length >= 3);
 
-  // El detalle tecnico esta detras del boton: quien no sepa, no se lo encuentra
   const adv = d.querySelector('#advanced'), btnAdv = d.querySelector('#btnAdv');
   check('el detalle tecnico arranca oculto', adv.hidden === true);
   check('y el boton lo anuncia', btnAdv.getAttribute('aria-expanded') === 'false');
@@ -445,7 +415,6 @@ if (!JSDOM) {
     Array.from(d.querySelectorAll('#result a[target="_blank"]')).every(a => /noreferrer/.test(a.getAttribute('rel') || '')));
   check('el desglose de la nota se pinta', /reparte la nota/.test(d.querySelector('#p-hallazgos').textContent));
   check('los hashes llegan a la pantalla', /[0-9a-f]{64}/.test(d.querySelector('#p-adjuntos').textContent));
-  // La importante: si esto falla, la web ejecutaría el phishing en vez de analizarlo
   check('la pestaña de URLs separa enlaces de recursos',
     /Enlaces en los que se puede pinchar/.test(d.querySelector('#p-urls').textContent));
   check('EL HTML DEL CORREO NO SE EJECUTA',

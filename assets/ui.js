@@ -6,9 +6,8 @@
   const $ = s => document.querySelector(s);
   const $$ = s => Array.from(document.querySelectorAll(s));
 
-  let batch = [];          // [{name, report}]
+  let batch = [];
 
-  // --- helpers -------------------------------------------------------------
   const esc = s => String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -25,7 +24,6 @@
 
   const SEVLABEL = { high: 'ALTO', medium: 'MEDIO', low: 'BAJO', info: 'INFO' };
 
-  // --- carga de ficheros ---------------------------------------------------
   async function handleFiles(files) {
     batch = [];
     for (const f of files) {
@@ -36,7 +34,6 @@
         batch.push({ name: f.name, report });
       } catch (e) {
         console.error(e);
-        // Los formatos que no sabemos leer se explican; el resto es un fallo
         alert(e.formatoNoSoportado ? e.message : 'No se pudo analizar ' + f.name + ': ' + e.message);
       }
     }
@@ -62,20 +59,17 @@
     box.querySelectorAll('tr[data-i]').forEach(tr => tr.onclick = () => show(batch[+tr.dataset.i].report));
   }
 
-  // --- render principal ----------------------------------------------------
   function show(r) {
     $('#result').hidden = false;
     ['#btnReset'].forEach(s => $(s).disabled = false);
 
-    // El veredicto es lo primero que se lee, y va en cristiano. El numero y la
-    // etiqueta tecnica quedan debajo, en pequeño, para quien los quiera.
     const [titulo, lede] = TITULARES[r.verdict];
     $('#verdictBox').className = 'verdict r-' + r.verdict;
     const ring = $('#ring'), svg = $('.score-ring');
     const circ = 2 * Math.PI * 17;
     ring.setAttribute('stroke-dasharray', (circ * r.score / 100).toFixed(1) + ' ' + circ.toFixed(1));
     $('#ringTxt').textContent = r.score;
-    svg.style.color = r.score >= 50 ? 'var(--high)' : r.score >= 20 ? 'var(--med)' : 'var(--accent)';
+    svg.style.color = r.score >= 50 ? 'var(--high)' : r.score >= 18 ? 'var(--med)' : 'var(--accent)';
     const t = $('#verdictTitle');
     t.textContent = titulo;
     t.className = 'v-' + r.verdict;
@@ -93,7 +87,6 @@
     renderSimple(r); renderResumen(r); renderHallazgos(r); renderCabeceras(r); renderAuth(r);
     renderReceived(r); renderUrls(r); renderAdjuntos(r); renderCuerpo(r);
     renderIocs(r); renderJson(r);
-    // La vista sencilla siempre se ve; el detalle vuelve a su primera pestaña
     $$('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.p === 'resumen'));
     $$('.panel').forEach(p => p.classList.toggle('active', p.dataset.p === 'resumen'));
     window.scrollTo({ top: $('#result').offsetTop - 20, behavior: 'smooth' });
@@ -105,17 +98,12 @@
     ).join('') + '</table>';
   }
 
-  // --- Vista para gente que no es de esto -------------------------------------
-  // Traduce los ids de hallazgo a frases que entienda cualquiera.
   const EN_CRISTIANO = {
     'url-tld': 'Los enlaces llevan a webs del tipo que usan casi siempre las estafas.',
-    'url-http': 'Un enlace te pide datos por una conexión sin proteger.',
-    'url-creds': 'Hay enlaces a páginas que te piden entrar en tu cuenta.',
     'replyto-freemail': 'Si respondes, tu respuesta se va a otra cuenta distinta.',
     'from-freemail-cargo': 'Dice ser un jefe de una empresa, pero escribe desde un Gmail o parecido.',
     'body-iban': 'Te da un número de cuenta para que ingreses el dinero ahí.',
     'body-nocontacto': 'Te pide que no llames ni se lo cuentes a nadie, para que nadie pueda desmentirlo.',
-    'url-filehost': 'Lleva a Drive, Dropbox o parecido. Comprueba que esperabas ese documento.',
     'combo-bec': 'Se hace pasar por alguien de confianza para que pagues algo.',
     'combo-credenciales': 'Es una página falsa montada para robarte la contraseña.',
     'combo-malware': 'Trae un archivo peligroso y te mete prisa para que lo abras.',
@@ -123,23 +111,19 @@
     'dmarc-fail': 'El correo no viene de donde dice venir.',
     'spf-fail': 'Lo ha enviado un servidor que no es el de esa empresa.',
     'dkim-fail': 'La firma del correo no cuadra: lo han manipulado o es falso.',
-    'align-none': 'Quien lo ha enviado de verdad no tiene nada que ver con quien dice ser.',
-    'rp-mismatch': 'La dirección real de quien escribe no es la que se ve.',
-    'replyto-mismatch': 'Si respondes, tu respuesta iría a una dirección distinta de la que ves.',
-    'dn-brand': 'Usa el nombre de una marca conocida, pero la dirección real es otra.',
-    'dn-email': 'El nombre de quien escribe lleva una dirección falsa para despistar.',
     'from-punycode': 'La dirección usa letras raras que imitan a otra conocida.',
     'from-tld': 'Escribe desde un tipo de web muy barata, típica de estafas.',
     'subj-urgency': 'El asunto mete prisa o amenaza. Es el truco más viejo que hay.',
-    'subj-nothread': 'Finge ser la respuesta a una conversación que nunca existió.',
     'body-password': 'Te pide la contraseña dentro del propio correo. Ningún banco hace eso.',
-    'body-form': 'Trae un formulario para que escribas datos dentro del correo.',
-    'body-script': 'Lleva código de programa escondido dentro.',
     'body-refresh': 'Intenta llevarte solo a otra página en cuanto lo abres.',
     'body-hidden': 'Lleva texto invisible para colarse en el filtro de spam.',
     'body-image': 'Es casi todo una imagen, para que los filtros no puedan leerlo.',
     'body-bec': 'Pide cambiar datos del banco o hacer un pago.',
     'mime-profundo': 'El correo esconde sus partes unas dentro de otras muchas veces seguidas. Eso se hace para que los análisis no lleguen al fondo.',
+    'dn-suplanta-propio': 'Se hace pasar por tu propia empresa o tu proveedor de correo, pero escribe desde fuera. Tu informático no te escribe desde otro dominio.',
+    'from-basura': 'La dirección de quien escribe es un dominio inventado a máquina, del tipo que se registra a miles para una estafa y se tira.',
+    'body-buzon': 'Te dice que tu buzón se llena, que tu contraseña caduca o que tienes correo retenido. Es la excusa más usada del mundo para que escribas tu contraseña.',
+    'url-hosting-gratis': 'El enlace lleva a una página montada en alojamiento gratuito, no a la web de la empresa que dice ser.',
     'subj-premio': 'Te anuncia un premio, un sorteo o un bono que tú no has pedido. Nadie regala nada por correo.',
     'att-senuelo': 'Casi todo el mensaje está en el adjunto y no hay ni un enlace. Es la forma de que abras el fichero sin pensarlo.',
     'dn-oficial-freemail': 'Firma como un departamento oficial o una marca, pero escribe desde un Gmail o parecido. Una empresa de verdad no hace eso.',
@@ -149,7 +133,6 @@
     'url-mismatch': 'Un enlace enseña una dirección pero lleva a otra distinta.',
     'url-ip': 'Un enlace lleva a un número en vez de a una web con nombre.',
     'url-punycode': 'Un enlace usa letras raras que imitan a una web conocida.',
-    'url-brand': 'Un enlace mete el nombre de una marca en una web que no es suya.',
     'url-shortener': 'Hay enlaces acortados que esconden a dónde llevan de verdad.',
     'url-userinfo': 'Un enlace está montado para aparentar un destino que no es el real.',
     'att-exec': 'Trae un programa. Abrirlo instalaría algo en tu ordenador.',
@@ -165,29 +148,19 @@
     'spf-softfail': 'El servidor que lo ha enviado no es del todo el que debería.',
     'spf-neutral': 'El dominio desde el que escriben no dice quién puede enviar en su nombre.',
     'compauth': 'Los filtros de Microsoft no han podido confirmar que sea auténtico.',
-    'align-dkim': 'La firma del correo es de otra empresa distinta de la que dice enviarlo.',
     'from-multi': 'El correo lleva varios remitentes a la vez. Es una forma de despistar a los filtros.',
-    'from-missing': 'El correo no dice quién lo envía.',
-    'mid-missing': 'Le falta la marca que ponen los programas de correo normales.',
-    'mid-mismatch': 'La marca interna del correo no cuadra con quien dice enviarlo.',
     'url-zerowidth': 'Un enlace lleva letras invisibles metidas dentro para disimular a dónde va.',
     'url-rtlo': 'Un enlace usa un truco para que la dirección se lea al revés de como es.',
     'url-data': 'Un enlace lleva una página entera metida dentro del propio correo.',
     'url-multi-at': 'Un enlace enseña una dirección conocida al principio, pero el destino real es otro.',
     'url-subdomains': 'Un enlace encadena tantos nombres que el de verdad queda escondido al final.',
-    'url-no-tld': 'Un enlace no lleva a una web normal, sino a un nombre suelto.',
-    'url-port': 'Un enlace entra por una puerta rara del servidor, no por la habitual.',
     'att-archive-nested': 'Trae un comprimido con otro dentro. Se hace para que el antivirus no pueda mirar.',
     'att-encrypted': 'Trae un archivo con contraseña. Así ningún antivirus puede ver lo que lleva.',
     'att-ole': 'Un archivo tiene por dentro un formato antiguo de Office que no le corresponde.',
-    'att-container': 'Trae un archivo comprimido, y ahí dentro puede ir cualquier cosa.',
-    'body-iframe': 'Lleva una ventana a otra web incrustada dentro.',
     'body-empty': 'No dice nada: solo trae el archivo adjunto.',
-    'body-entities': 'El texto está escrito de forma rara a propósito, para colarse en los filtros.',
     'rcv-none': 'No se ve por dónde ha pasado. O lo han metido a mano o le han borrado el rastro.',
     'date-missing': 'El correo no lleva fecha.',
     'date-skew': 'La fecha que dice el correo no cuadra con la de los servidores por los que pasó.',
-    'rcv-delay': 'Se quedó parado horas en uno de los servidores por los que pasó.'
   };
 
   const CONSEJOS = {
@@ -214,14 +187,12 @@
     BAJO: ['No he visto señales de estafa', 'Aun así, comprueba antes de fiarte de lo que te pida.']
   };
 
-  // La etiqueta tecnica, escrita como se escribe en castellano
   const VERDICTO_ES = { CRITICO: 'CRÍTICO', ALTO: 'ALTO', MEDIO: 'MEDIO', BAJO: 'BAJO' };
 
   const vtSearch = q => 'https://www.virustotal.com/gui/search/' + encodeURIComponent(q);
   const vtFile = h => 'https://www.virustotal.com/gui/file/' + encodeURIComponent(h);
   const abuseIp = ip => 'https://www.abuseipdb.com/check/' + encodeURIComponent(ip);
 
-  // Alias de reenvío: la dirección real está oculta a propósito y no dice nada
   const RELAYS = {
     'privaterelay.appleid.com': 'un alias de «Ocultar mi correo» de Apple',
     'duck.com': 'un alias de DuckDuckGo',
@@ -230,7 +201,6 @@
     'anonaddy.me': 'un alias de AnonAddy'
   };
 
-  // "noreply_at_confirmation_onlinesoccermanager_com_hsmv...@x.com" no lo lee nadie
   function direccionCorta(addr) {
     if (!addr) return '?';
     const i = addr.lastIndexOf('@');
@@ -240,8 +210,6 @@
     return esc(cortada) + '@<b>' + esc(dominio) + '</b>';
   }
 
-  // Quien escribe y con que asunto. Antes estaba mezclado con los motivos, y
-  // lo primero que quiere ver alguien es de quien viene el correo.
   function renderSobre(r) {
     const relay = RELAYS[r.summary.fromOrgDomain];
     $('#sobre').innerHTML =
@@ -256,7 +224,7 @@
   function renderSimple(r) {
     const vistos = [];
     for (const f of r.findings.slice().sort((a, b) => (b.points || 0) - (a.points || 0))) {
-      if (!(f.points > 0)) continue;   // los mitigantes no son motivos de sospecha
+      if (!(f.points > 0)) continue;
       const txt = EN_CRISTIANO[f.id];
       if (txt && vistos.indexOf(txt) < 0) vistos.push(txt);
     }
@@ -280,16 +248,11 @@
       'Si ya has perdido dinero, denúncialo en la Policía o la Guardia Civil.</div>';
   }
 
-  // Fichas públicas de VirusTotal y AbuseIPDB. Es una acción técnica y con
-  // consecuencias (le cuentas a un tercero que has recibido esto), así que
-  // vive en el detalle y no en la vista de todos.
   function comprobaciones(r) {
     const out = [];
     for (const a of r.attachments) {
       if (a.sha256) out.push(['Adjunto: ' + a.filename, vtFile(a.sha256), 'VirusTotal']);
     }
-    // Solo los dominios de enlaces pinchables que NO son del propio remitente:
-    // ofrecerle diez botones, la mitad de CDNs, no ayuda a nadie.
     const dominiosUtiles = [...new Set(r.urls
       .filter(u => u.tipo === 'enlace' && !u.propio && u.orgDomain)
       .map(u => u.orgDomain))].slice(0, 6);
@@ -333,13 +296,10 @@
     const lista = comprobaciones(r);
     if (!lista.length) return '';
     return '<div class="card"><h3>Comprobar en servicios públicos <span class="muted">(sin registrarte)</span></h3>' +
-      '<p class="small">Cada botón abre la ficha pública de ese dato. Si sale en rojo, ya lo han denunciado otros.</p>' +
       '<div class="chips">' + lista.map(([label, url, svc]) =>
         '<a class="btn" target="_blank" rel="noopener noreferrer" href="' + esc(url) + '">' +
         esc(label.length > 46 ? label.slice(0, 46) + '...' : label) + ' &rarr; ' + svc + '</a>').join('') +
-      '</div>' +
-      '<p class="small" style="margin-top:10px">Ojo: al abrirlos le estás contando a esos servicios que has ' +
-      'recibido este correo. Para un correo normal da igual; si investigas un ataque dirigido, mejor no.</p></div>';
+      '</div></div>';
   }
 
   function tree(node, prefix) {
@@ -354,7 +314,6 @@
   function renderHallazgos(r) {
     const order = { high: 0, medium: 1, low: 2, info: 3 };
     const list = r.findings.slice().sort((a, b) => order[a.sev] - order[b.sev]);
-    // Cómo se reparte la nota: cada categoría suma hasta su techo y nada más
     const desglose = '<div class="card"><h3>Cómo se reparte la nota ' +
       '<span class="muted">(cada categoría tiene un techo; los techos suman 100)</span></h3>' +
       '<table><thead><tr><th>Categoría</th><th>Cuenta</th><th>Reparto</th>' +
@@ -399,10 +358,7 @@
       (a.dkimSignatures.length ? '<div class="card"><h3>Firmas DKIM</h3><table><thead><tr><th>d=</th><th>s=</th><th>a=</th><th>c=</th><th>len(b)</th></tr></thead><tbody>' +
         a.dkimSignatures.map(s => '<tr><td class="v">' + esc(s.d) + '</td><td class="v">' + esc(s.s) + '</td><td class="v">' + esc(s.a) + '</td><td class="v">' + esc(s.c) + '</td><td class="v">' + s.bLen + '</td></tr>').join('') +
         '</tbody></table></div>' : '') +
-      '<div class="card"><h3>Cabeceras en bruto</h3><pre class="block">' + esc(a.raw.join('\n\n') || 'Sin Authentication-Results.') + '</pre></div>' +
-      '<div class="card"><h3>Como leerlo</h3><p class="small">SPF valida la IP emisora frente al dominio del <i>sobre</i> (Return-Path), no frente al From visible. ' +
-      'DKIM valida una firma criptografica del dominio <code>d=</code>. DMARC exige que al menos uno de los dos <b>pase y alinee</b> con el dominio del From. ' +
-      'Un SPF=pass con DMARC=fail es la firma clasica del spoofing: el atacante autentica su propio dominio, no el que muestra.</p></div>';
+      '<div class="card"><h3>Cabeceras en bruto</h3><pre class="block">' + esc(a.raw.join('\n\n') || 'Sin Authentication-Results.') + '</pre></div>';
   }
 
   function renderReceived(r) {
@@ -422,7 +378,6 @@
       }).join('') + '</div>';
   }
 
-  // Un mismo destino repetido con distintos parámetros es un destino, no cinco
   function agrupar(lista) {
     const mapa = new Map();
     for (const u of lista) {
@@ -455,8 +410,7 @@
       (recursos.length
         ? '<details class="card"><summary style="cursor:pointer">Recursos que carga el correo solo: ' +
           'imágenes, iconos y fuentes <span class="muted">(' + recursos.length + ' destinos)</span></summary>' +
-          '<p class="small">Aquí no se pincha. Se cargan al abrir el correo, y por eso sirven ' +
-          'para saber si lo has leído.</p></details>' + recursos.map(pinta).join('')
+          '</details>' + recursos.map(pinta).join('')
         : '');
     const b = $('#copyUrls');
     if (b) b.onclick = () => copy(r.urls.map(u => u.defanged).join('\n'), b);
@@ -474,8 +428,7 @@
         ' &middot; <a target="_blank" rel="noopener noreferrer" href="https://www.virustotal.com/gui/file/' + esc(a.sha256) + '">VT</a></div>' : '') +
       a.flags.map(f => '<div class="finding"><span class="sev sev-' + f.sev + '">' + SEVLABEL[f.sev] + '</span><span>' + esc(f.msg) + '</span></div>').join('') +
       '</div>').join('') +
-      '<p class="small">Los hashes se calculan aquí mismo (SHA-1 y SHA-256 con WebCrypto, MD5 en JavaScript). ' +
-      'El contenido del adjunto no se envía a ningún sitio: si pulsas el enlace de VirusTotal solo viaja el hash.</p>';
+      '<p class="small">El contenido del adjunto no sale de aquí: si pulsas el enlace de VirusTotal solo viaja el hash.</p>';
   }
 
   function renderCuerpo(r) {
@@ -511,7 +464,6 @@
     $('#copyJson').onclick = e => copy(JSON.stringify(r, null, 2), e.target);
   }
 
-  // --- eventos -------------------------------------------------------------
   const drop = $('#drop');
   drop.onclick = () => $('#file').click();
   $('#file').onchange = e => handleFiles(Array.from(e.target.files));
@@ -542,7 +494,6 @@
     $$('.panel').forEach(p => p.classList.toggle('active', p.dataset.p === b.dataset.p));
   };
 
-  // --- detalle técnico: oculto por defecto ---------------------------------
   function setAdvanced(on) {
     $('#advanced').hidden = !on;
     $('#btnAdv').setAttribute('aria-expanded', on ? 'true' : 'false');
@@ -556,7 +507,6 @@
   try { avanzadoGuardado = localStorage.getItem('phishtriage.avanzado') === '1'; } catch (e) {}
   setAdvanced(avanzadoGuardado);
 
-  // Aviso si la página no se sirve por HTTPS/localhost (WebCrypto desactivado)
   if (!window.isSecureContext) {
     $('#offlineBadge').textContent = 'Ábrelo por https: faltan algunos datos';
     $('#offlineBadge').style.color = 'var(--med)';

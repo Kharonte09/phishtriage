@@ -10,9 +10,6 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  // ---------------------------------------------------------------------------
-  // Utilidades de bytes / codificaciones
-  // ---------------------------------------------------------------------------
 
   function bytesToLatin1(bytes) {
     let out = '';
@@ -65,11 +62,9 @@
     return bytesToLatin1(bytes);
   }
 
-  // RFC 2047: =?charset?B|Q?texto?=
   function decodeRFC2047(input) {
     if (!input) return '';
     let s = String(input);
-    // Palabras codificadas consecutivas separadas solo por espacios se concatenan
     s = s.replace(/(=\?[^?]+\?[BbQq]\?[^?]*\?=)\s+(?==\?)/g, '$1');
     return s.replace(/=\?([^?]+)\?([BbQq])\?([^?]*)\?=/g, (m, cs, enc, txt) => {
       try {
@@ -79,9 +74,6 @@
     });
   }
 
-  // ---------------------------------------------------------------------------
-  // MD5 puro JS (WebCrypto no lo soporta, pero los analistas lo piden)
-  // ---------------------------------------------------------------------------
   function md5(bytes) {
     function add32(a, b) { return (a + b) & 0xffffffff; }
     function cmn(q, a, b, x, s, t) {
@@ -163,11 +155,7 @@
     return out;
   }
 
-  // ---------------------------------------------------------------------------
-  // Dominios
-  // ---------------------------------------------------------------------------
 
-  // PSL reducida: sufijos de dos niveles mas habituales.
   const MULTI_SUFFIX = new Set('co.uk org.uk me.uk gov.uk ac.uk net.uk sch.uk com.es org.es gob.es edu.es nom.es com.ar com.br com.mx com.co com.pe com.cl com.ve com.uy com.au net.au org.au gov.au edu.au co.jp or.jp ne.jp ac.jp go.jp co.kr or.kr co.in net.in org.in gov.in co.za org.za com.tr gov.tr com.cn net.cn org.cn gov.cn com.tw com.hk com.sg com.my co.nz com.pt com.pl com.ua com.ru org.ru net.ru co.il com.sa com.eg com.ng'.split(' '));
 
   function orgDomain(host) {
@@ -182,7 +170,6 @@
   }
 
   const RE_IPV4 = /\b((?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})\b/;
-  // {3,7} grupos evita confundir marcas de tiempo hh:mm:ss con IPv6
   const RE_IPV6 = /\b(?:[0-9A-Fa-f]{1,4}:){3,7}[0-9A-Fa-f]{1,4}\b|\b(?:[0-9A-Fa-f]{1,4}:){1,6}:[0-9A-Fa-f]{1,4}\b/;
 
   function isIP(s) { return new RegExp('^(?:' + RE_IPV4.source.replace(/\\b/g, '') + '|' + RE_IPV6.source.replace(/\\b/g, '') + ')$').test(String(s)); }
@@ -196,10 +183,6 @@
       (p[0] === 192 && p[1] === 168) || (p[0] === 169 && p[1] === 254) || p[0] === 0;
   }
 
-  // Homoglifos de verdad. Lo que delata un ataque IDN no es que haya letras
-  // no ASCII -medio mundo se llama Michał o Tomáš-, es que dentro de UNA MISMA
-  // palabra se mezclen alfabetos: la "а" cirilica colada en "pаypal".
-  // Rspamd puntua esto (R_MIXED_CHARSET) mas alto que cualquier fallo de SPF.
   const SCRIPTS = [
     ['cirílico', /[\u0400-\u04FF\u0500-\u052F]/],
     ['griego',   /[\u0370-\u03FF\u1F00-\u1FFF]/],
@@ -207,8 +190,6 @@
     ['latino',   /[A-Za-z\u00C0-\u024F]/]
   ];
 
-  // Normaliza los cambios de letra habituales del typosquatting antes de
-  // comparar: 0 por o, 1 por l, rn por m, vv por w.
   function normalizaLeet(s) {
     return String(s || '').toLowerCase()
       .replace(/rn/g, 'm').replace(/vv/g, 'w')
@@ -217,7 +198,6 @@
       .replace(/[^a-z]/g, '');
   }
 
-  // Distancia de edicion, cortando en cuanto pasa del maximo que nos interesa.
   function distancia(a, b, max) {
     if (Math.abs(a.length - b.length) > max) return max + 1;
     let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
@@ -234,26 +214,18 @@
     return prev[b.length];
   }
 
-  // ¿El dominio imita a una marca conocida sin ser suyo? "paypa1-secure.com"
-  // no lleva la marca dentro como subcadena, asi que la regla de tokens de las
-  // URLs no lo ve.
   function dominioParecido(orgDomain) {
     if (!orgDomain) return null;
     const etiqueta = String(orgDomain).split('.')[0];
     if (!etiqueta || etiqueta.length < 4) return null;
     const norm = normalizaLeet(etiqueta);
-    // Sin sustituir letras: si YA es la marca tal cual, es la marca de verdad.
-    // Si solo lo es despues de deshacer los cambios (arnazon -> amazon), es
-    // justo lo contrario: un typosquat.
     const crudo = String(etiqueta).toLowerCase().replace(/[^a-z]/g, );
     if (!norm) return null;
     for (const marca of BRANDS) {
       if (marca.length < 4) continue;
-      if (crudo === marca) return null;            // es la marca de verdad
-      if (norm === marca) return marca;            // lo es solo tras deshacer los cambios
-      // La marca aparece pegada a otras letras: "paypal-secure", "micros0ft-security"
+      if (crudo === marca) return null;
+      if (norm === marca) return marca;
       if (norm.length > marca.length && norm.indexOf(marca) >= 0) return marca;
-      // O es la marca con una o dos letras cambiadas
       const d = distancia(norm, marca, 2);
       if (d > 0 && d <= (marca.length >= 8 ? 2 : 1)) return marca;
     }
@@ -278,9 +250,6 @@
       .replace(/@/g, '[@]');
   }
 
-  // ---------------------------------------------------------------------------
-  // Cabeceras y MIME
-  // ---------------------------------------------------------------------------
 
   function splitHeadersBody(raw) {
     const idx = raw.search(/\r?\n\r?\n/);
@@ -331,7 +300,6 @@
       if (!m) continue;
       let key = m[1].trim().toLowerCase();
       let val = m[2].trim().replace(/^"|"$/g, '');
-      // RFC 2231: name*0*, name*1*, name*
       const cm = key.match(/^([^*]+)\*(\d+)?\*?$/);
       if (cm) {
         cont[cm[1]] = cont[cm[1]] || [];
@@ -366,11 +334,6 @@
       disposition: cd.value || '', dispParams: cd.params, encoding: enc,
       body, children: [], depth
     };
-    // Hace falta un limite para no quedarse dando vueltas, pero pararse en
-    // silencio es peor que no mirar: con el limite en 12, un adjunto colgado por
-    // debajo desaparecia del informe y la nota caia a BAJO. Ahora el limite es
-    // 30 -el correo normal no pasa de 5- y ademas se marca, para que la nota lo
-    // tenga en cuenta en vez de callarselo.
     if (depth > 30) {
       if (node.mime.startsWith('multipart/') || node.mime === 'message/rfc822') node.truncado = true;
       return node;
@@ -410,9 +373,6 @@
     return decodeBytes(nodeBytes(node), node.params.charset || 'utf-8');
   }
 
-  // ---------------------------------------------------------------------------
-  // Direcciones
-  // ---------------------------------------------------------------------------
 
   function parseAddressList(value) {
     if (!value) return [];
@@ -440,9 +400,6 @@
     });
   }
 
-  // ---------------------------------------------------------------------------
-  // Autenticación
-  // ---------------------------------------------------------------------------
 
   function parseAuthResults(headers) {
     const res = {
@@ -463,7 +420,6 @@
       m = low.match(/header\.d\s*=\s*([^\s;,()]+)/); if (m && !res.dkimDomain) res.dkimDomain = m[1];
       m = low.match(/header\.from\s*=\s*([^\s;,()]+)/); if (m && !res.dmarcFrom) res.dmarcFrom = m[1].replace(/^.*@/, '');
     }
-    // Received-SPF como respaldo
     if (!res.spf) {
       const rs = headerAll(headers, 'received-spf');
       for (const line of rs) {
@@ -479,7 +435,6 @@
       res.dkimSignatures.push({ d: g('d'), s: g('s'), a: g('a'), c: g('c'), bLen: (g('b') || '').length });
     }
     if (!res.dkimDomain && res.dkimSignatures.length) res.dkimDomain = res.dkimSignatures[0].d;
-    // "none" no es un dominio
     for (const k of ['spfDomain', 'dkimDomain', 'dmarcFrom']) {
       if (res[k] && /^(none|unknown|-)$/i.test(res[k])) res[k] = null;
     }
@@ -487,9 +442,6 @@
     return res;
   }
 
-  // ---------------------------------------------------------------------------
-  // Cadena Received
-  // ---------------------------------------------------------------------------
 
   function parseReceived(headers) {
     const raw = headerAll(headers, 'received');
@@ -516,7 +468,6 @@
         ips, publicIPs: ips.filter(ip => !isPrivateIP(ip))
       };
     });
-    // Received se apila hacia arriba: el último del array es el primer salto real
     const chrono = hops.slice().reverse();
     for (let i = 0; i < chrono.length; i++) {
       const prev = chrono[i - 1];
@@ -526,9 +477,6 @@
     return chrono;
   }
 
-  // ---------------------------------------------------------------------------
-  // URLs
-  // ---------------------------------------------------------------------------
 
   const SHORTENERS = new Set('bit.ly tinyurl.com t.co goo.gl ow.ly is.gd buff.ly cutt.ly rb.gy shorturl.at rebrand.ly tiny.cc lnkd.in bl.ink t.ly shorte.st adf.ly v.gd trib.al mcaf.ee urlz.fr x.gd clck.ru'.split(' '));
 
@@ -541,14 +489,10 @@
 
   const BRANDS = 'microsoft office365 outlook onedrive sharepoint apple icloud google gmail amazon aws paypal netflix facebook instagram whatsapp linkedin dropbox docusign adobe santander bbva caixabank sabadell bankinter unicaja ing correos seur dhl fedex ups dgt aeat agenciatributaria seguridadsocial endesa iberdrola movistar vodafone binance coinbase metamask revolut wetransfer zoom teams chase hsbc'.split(' ');
 
-  // Correo gratuito: legítimo para una persona, sospechoso cuando quien escribe
-  // dice ser el director financiero de una empresa.
   const FREEMAIL = new Set('gmail.com googlemail.com hotmail.com hotmail.es outlook.com outlook.es live.com yahoo.com yahoo.es aol.com protonmail.com proton.me gmx.com mail.com yandex.com icloud.com'.split(' '));
 
   const CARGOS = /\b(ceo|cfo|coo|cto|director|directora|direccion|dirección|gerente|presidente|presidenta|administrador|administradora|jefe|jefa|responsable|manager|head of)\b/i;
 
-  // Servicios de archivos: el phishing desde cuentas comprometidas casi siempre
-  // apunta aquí, porque el dominio es legítimo y ningún filtro lo bloquea.
   const FILEHOSTS = new Set('drive.google.com docs.google.com dropbox.com wetransfer.com we.tl onedrive.live.com 1drv.ms mega.nz mediafire.com box.com sharefile.com sync.com pcloud.com terabox.com'.split(' '));
 
   const IBAN_RE = /\b[A-Z]{2}\d{2}[ ]?(?:[A-Za-z0-9]{4}[ ]?){3,7}[A-Za-z0-9]{1,4}\b/;
@@ -570,12 +514,9 @@
     return { url: s, scheme, host: host.toLowerCase(), port, userinfo, path: rest };
   }
 
-  // dominiosPropios: dominio del remitente y el que firma DKIM. Un enlace a la
-  // propia casa del remitente no es un indicio de nada, y era la mayor fuente
-  // de falsos positivos: cualquier boletín enlaza a su zona de cuenta.
   function extractLinks(htmlText, plainText, dominiosPropios) {
     const propios = new Set((dominiosPropios || []).filter(Boolean));
-    const found = new Map(); // url -> {texts:Set, sources:Set}
+    const found = new Map();
     const add = (url, text, source) => {
       if (!url) return;
       const p = parseUrl(url);
@@ -605,7 +546,6 @@
         const re2 = /<(?:img|form|[a-z]+)\b[^>]*(?:src|action|background)\s*=\s*["']?([^"'\s>]+)/gi;
         while ((m = re2.exec(htmlText))) add(decodeEntities(m[1]), '[asset]', 'html:asset');
       }
-      // URLs sueltas en el HTML (dentro de scripts, meta refresh...)
       const bare = htmlText.replace(/<[^>]+>/g, ' ');
       let m2; const re3 = new RegExp(URL_RE.source, 'gi');
       while ((m2 = re3.exec(bare))) add(decodeEntities(m2[0]), null, 'html:text');
@@ -630,23 +570,14 @@
       if (/[\u202A-\u202E\u2066-\u2069]/.test(p.url)) flags.push({ id: 'url-rtlo', sev: 'high', msg: 'Caracteres de control bidireccional en la URL: la dirección se lee al revés de como es' });
       if (/[\u200B-\u200D\uFEFF\u2060]/.test(p.url)) flags.push({ id: 'url-zerowidth', sev: 'high', msg: 'Caracteres invisibles de ancho cero dentro de la URL' });
       if ((p.userinfo.match(/@/g) || []).length >= 1) flags.push({ id: 'url-multi-at', sev: 'high', msg: 'Varias "@" en la dirección: todo lo anterior a la última es decorado, el destino real es ' + host });
-      if (!isIP(host) && host.indexOf('.') < 0) flags.push({ id: 'url-no-tld', sev: 'medium', msg: 'El destino no tiene dominio de primer nivel: ' + host });
       if (p.userinfo) flags.push({ id: 'url-userinfo', sev: 'high', msg: 'Autoridad con "@" (' + p.userinfo + '@): oculta el host real' });
       if (SHORTENERS.has(od)) flags.push({ id: 'url-shortener', sev: 'medium', msg: 'Acortador de URL: destino oculto' });
-      if (REDIRECT_HOSTS.some(r => r.test(host))) flags.push({ id: 'url-redirector', sev: 'info', msg: 'Host de redirección/tracking' });
-      if (p.port && p.port !== '80' && p.port !== '443') flags.push({ id: 'url-port', sev: 'medium', msg: 'Puerto no estándar: ' + p.port });
       if (RISKY_TLD.has(tld)) flags.push({ id: 'url-tld', sev: 'medium', msg: 'TLD de alto abuso: .' + tld });
-      if (CRED_WORDS.test(p.path)) flags.push({ id: 'url-creds', sev: 'medium', msg: 'Ruta con palabras de robo de credenciales' });
-      if (p.scheme === 'http' && CRED_WORDS.test(p.path)) flags.push({ id: 'url-http', sev: 'medium', msg: 'Formulario sensible sobre HTTP sin cifrar' });
       if ((host.match(/\./g) || []).length >= 4) flags.push({ id: 'url-subdomains', sev: 'low', msg: 'Exceso de subdominios (' + host + ')' });
-      // Por tokens y no por subcadena: "steamstatic" contiene "teams" y
-      // "purchase" contiene "chase". Así solo cuenta la marca como palabra.
       const tokens = host.split(/[.\-_]/).filter(Boolean);
       const brandHit = BRANDS.find(b => tokens.includes(b) && !od.split('.')[0].startsWith(b));
-      if (brandHit) flags.push({ id: 'url-brand', sev: 'high', msg: 'Marca "' + brandHit + '" en subdominio de un dominio ajeno' });
       if (/^data:/i.test(p.url)) flags.push({ id: 'url-data', sev: 'high', msg: 'data: URI (HTML embebido)' });
       if (FILEHOSTS.has(host) || FILEHOSTS.has(od)) {
-        flags.push({ id: 'url-filehost', sev: 'low', msg: 'Enlace a un servicio de archivos (' + host + '): comprueba que esperabas ese documento' });
       }
 
       for (const t of texts) {
@@ -658,14 +589,10 @@
           }
         }
       }
-      // En casa del remitente, los indicios débiles no cuentan
-      const DEBILES = 'url-creds url-brand url-tld url-subdomains url-http url-port url-redirector url-filehost'.split(' ');
+      const DEBILES = 'url-tld url-subdomains url-hosting-gratis'.split(' ');
       const enCasa = propios.has(od);
       const flagsFinales = enCasa ? flags.filter(f => DEBILES.indexOf(f.id) < 0) : flags;
 
-      // Un enlace es donde el usuario puede pinchar. Una imagen o una fuente
-      // que carga la plantilla no lo es, y mezclarlas hacía que un boletín
-      // normal dijera "23 enlaces" cuando el usuario ve cuatro.
       const PINCHABLES = 'html:a html:form html:refresh text'.split(' ');
       const tipo = Array.from(entry.sources).some(x => PINCHABLES.indexOf(x) >= 0) ? 'enlace' : 'recurso';
 
@@ -677,8 +604,6 @@
     });
   }
 
-  // Un correo con &#x110000; tiraba el analisis entero por una excepcion de
-  // String.fromCodePoint. Fuera de rango se deja la entidad tal cual.
   function puntoCodigo(n, original) {
     if (!isFinite(n) || n < 0 || n > 0x10FFFF || (n >= 0xD800 && n <= 0xDFFF)) return original;
     try { return String.fromCodePoint(n); } catch (e) { return original; }
@@ -693,9 +618,6 @@
       .replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'").replace(/&nbsp;/gi, ' ');
   }
 
-  // ---------------------------------------------------------------------------
-  // Adjuntos
-  // ---------------------------------------------------------------------------
 
   const EXEC_EXT = new Set('exe scr com pif cpl msi msp mst dll sys bat cmd ps1 psm1 vbs vbe js jse wsf wsh hta jar lnk inf reg scf application gadget msc apk appx chm url library-ms settingcontent-ms diagcab theme iqy slk ade adp mde accdb py sh'.split(' '));
   const MACRO_EXT = new Set('docm dotm xlsm xltm xlam pptm potm ppam sldm xll xlsb'.split(' '));
@@ -716,9 +638,6 @@
     { sig: [0x7b, 0x5c, 0x72, 0x74], type: 'RTF' }
   ];
 
-  // Mira dentro de un ZIP sin descomprimirlo: basta con leer las cabeceras
-  // locales. El bit 0 del flag de proposito general dice si va cifrado, y los
-  // nombres de fichero dicen si dentro hay otro comprimido.
   function inspeccionaZip(bytes) {
     const out = { cifrado: false, anidado: null };
     if (bytes.length < 30 || bytes[0] !== 0x50 || bytes[1] !== 0x4b) return out;
@@ -774,7 +693,6 @@
       const flags = [];
       if (EXEC_EXT.has(ext)) flags.push({ id: 'att-exec', sev: 'high', msg: 'Extensión ejecutable/script: .' + ext });
       if (MACRO_EXT.has(ext)) flags.push({ id: 'att-macro', sev: 'high', msg: 'Office con macros habilitadas: .' + ext });
-      if (CONTAINER_EXT.has(ext)) flags.push({ id: 'att-container', sev: 'medium', msg: 'Contenedor (.' + ext + '): puede ocultar el payload' });
       if (HTML_EXT.has(ext)) flags.push({ id: 'att-html', sev: 'high', msg: 'Adjunto HTML/SVG: tipico de phishing local (smuggling)' });
       if (/\.[a-z0-9]{2,4}\s*\.[a-z0-9]{2,4}$/i.test(name)) flags.push({ id: 'att-double', sev: 'high', msg: 'Doble extensión en el nombre' });
       if (/[‪-‮⁦-⁩]/.test(name)) flags.push({ id: 'att-rtlo', sev: 'high', msg: 'Caracteres de control bidireccional (RTLO) en el nombre' });
@@ -784,7 +702,6 @@
       const zip = inspeccionaZip(bytes);
       if (zip.cifrado) flags.push({ id: 'att-encrypted', sev: 'high', msg: 'Archivo comprimido con contraseña: ningún antivirus puede mirar dentro' });
       if (zip.anidado) flags.push({ id: 'att-archive-nested', sev: 'high', msg: (CONTAINER_EXT.has(extOf(zip.anidado)) ? 'Comprimido dentro de otro comprimido' : 'Programa dentro del comprimido') + ' (' + zip.anidado + '): se hace para esquivar el antivirus' });
-      if (bytes.length === 0) flags.push({ id: 'att-empty', sev: 'info', msg: 'Adjunto vacio' });
       list.push({
         filename: name, mime: n.mime, declaredEncoding: n.encoding, disposition: n.disposition,
         size: bytes.length, sizeHuman: humanSize(bytes.length), magic, ext,
@@ -794,60 +711,6 @@
     return list;
   }
 
-  // ---------------------------------------------------------------------------
-  // PONDERACION
-  //
-  // Los pesos salen de medir el motor contra correo real. Corpus usados:
-  //
-  //   P  = Phishing Pot, 8.613 correos de phishing reales de honeypot (2023-25)
-  //   H1 = SpamAssassin hard_ham, 250 correos legitimos comerciales en HTML (2002)
-  //   H2 = Listas publicas de Apache, 3.471 correos legitimos (2025-26)
-  //
-  // Ninguno de los dos corpus legitimos vale por si solo: H1 tiene el HTML
-  // comercial pero es anterior a SPF/DKIM/DMARC, y H2 tiene la autenticacion
-  // moderna pero es texto plano de listas tecnicas. Asi que para cada regla se
-  // toma el PEOR caso legitimo de los dos, y de ahi la razon de verosimilitud:
-  //
-  //   LR = P(la regla dispara | phishing) / P(la regla dispara | legitimo)
-  //   pts = redondeo( 3.5 x log2(LR) )
-  //
-  // Una LR de 1 significa que el indicio no distingue nada, por grave que
-  // suene. Una de 30 significa que aparece treinta veces mas en el fraude.
-  //
-  // El campo `fuente` lleva los porcentajes medidos. Se regenera con:
-  //   node tools/verosimilitud.mjs <phishing> <legitimo>
-  //
-  // TRES AVISOS sobre los datos, que hay que tener presentes al tocar esto:
-  //
-  //  1. El 98,5% del corpus de phishing lo recibio Microsoft, frente al 8,1%
-  //     del legitimo. Todo lo que escriba el receptor esta contaminado:
-  //     `compauth` sale en el 72% del phishing y en el 0% del ham, pero eso
-  //     mide quien recibio el correo, no si es fraude. Su peso esta puesto a
-  //     mano por lo que significa, no por la medida.
-  //  2. H2 son listas de correo, que reescriben Reply-To y rompen el
-  //     alineamiento por diseño. Por eso replyto-mismatch y align-* disparan
-  //     tanto en legitimo. Es real para listas, no para correo normal.
-  //  3. Las reglas con 0,0% en ambos corpus no estan validadas: no hay datos,
-  //     ni a favor ni en contra. Se quedan con peso moderado porque son
-  //     precisas por construccion (un RTLO en un nombre de fichero no aparece
-  //     por accidente), pero nadie las ha comprobado contra nada.
-  //
-  // LO QUE LA MEDIDA CAMBIO RESPECTO DE LA VERSION ANTERIOR:
-  //
-  //  - La version anterior anclaba los pesos a SpamAssassin y Rspamd. Estaba
-  //    mal: esos motores llegan a su umbral sumando cientos de reglas mas
-  //    Bayes mas listas negras de red. Este tiene sesenta reglas y ninguna
-  //    consulta de red, asi que importar sus pesos por regla garantizaba no
-  //    llegar nunca. Detectaba el 2,1% del phishing real.
-  //  - Los mitigantes negativos eran contraproducentes. El 24% del phishing
-  //    real pasa DMARC -lo mandan desde tenants de Microsoft 365 robados- y el
-  //    60% activaba algun mitigante. Se les baja a la minima expresion.
-  //  - dn-brand valia 14 puntos y dispara MAS en correo legitimo (9,8% vs
-  //    11,1%): las marcas se llaman por su nombre en su propio correo.
-  //  - url-mismatch, el caso que encabeza el README, tiene LR 1,0. No
-  //    distingue. Hoy casi todo se lee en el movil, donde no se ve la URL, y
-  //    el atacante ya no se molesta.
-  // ---------------------------------------------------------------------------
   const CATEGORIAS = {
     auth:       { techo: 30, nombre: 'Autenticación' },
     identidad:  { techo: 20, nombre: 'Identidad del remitente' },
@@ -858,42 +721,19 @@
   };
 
   const PESOS = {
-    // --- Autenticación (techo 30) --------------------------------------------
-    // Lo que mas informa de todo, y no por el fallo en si: por lo que dice del
-    // dominio que envia. Un dominio que no publica DMARC aparece en el 44% del
-    // phishing y en el 3% del correo bueno.
     'dkim-fail':       { cat: 'auth', pts: 19, sev: 'high',  fuente: 'LR 41.5 (P 9.5% / H 0.0%)' },
     'dmarc-fail':      { cat: 'auth', pts: 19, sev: 'high',  fuente: 'LR 39.0 (P 7.8% / H 0.0%)' },
     'spf-fail':        { cat: 'auth', pts: 18, sev: 'high',  fuente: 'LR 32.8 (P 9.4% / H 0.1%)' },
     'spf-softfail':    { cat: 'auth', pts: 16, sev: 'medium', fuente: 'LR 26.3 (P 5.2% / H 0.0%)' },
     'spf-neutral':     { cat: 'auth', pts: 15, sev: 'medium', fuente: 'LR 18.9 (P 28.8% / H 1.3%)' },
     'dmarc-none':      { cat: 'auth', pts: 13, sev: 'medium', fuente: 'LR 12.4 (P 43.9% / H 3.3%)' },
-    // Puesto a mano: la medida esta contaminada por el receptor (aviso 1).
-    // Cuando Microsoft dice que la autenticacion compuesta falla, lo dice con
-    // mucha mas informacion de la que tenemos aqui.
     'compauth':        { cat: 'auth', pts: 12, sev: 'medium', fuente: 'a mano - veredicto de Microsoft, medida contaminada por el receptor' },
-    // Dispara en el 0,1% del phishing y en el 11% del legitimo: las listas de
-    // correo rompen el alineamiento por diseño. Era 8 puntos.
-    'align-none':      { cat: 'auth', pts: 0, sev: 'info',  fuente: 'LR 0.0 (P 0.1% / H 11.1%) - no distingue' },
-    'align-dkim':      { cat: 'auth', pts: 0, sev: 'info',  fuente: 'LR 0.1 (P 0.3% / H 3.4%) - no distingue' },
-    'spf-absent':      { cat: 'auth', pts: 0, sev: 'info',  fuente: 'ausencia de datos, no indicio' },
-    'dkim-absent':     { cat: 'auth', pts: 0, sev: 'info',  fuente: 'ausencia de datos, no indicio' },
-    'dmarc-absent':    { cat: 'auth', pts: 0, sev: 'info',  fuente: 'ausencia de datos, no indicio' },
-    'no-transport':    { cat: 'auth', pts: 0, sev: 'info',  fuente: 'informativo' },
 
-    // Mitigantes. El 24% del phishing real pasa DMARC y el 60% activaba alguno
-    // de estos, asi que restar de verdad era premiar al atacante que manda
-    // desde una cuenta robada. Se quedan en un gesto: separan al que autentica
-    // del que no, pero no rescatan a nadie.
     'ok-arc':          { cat: 'auth', pts: -1, sev: 'info', fuente: 'a mano - reenvio legitimo; el 60% del phishing tambien lo activaba' },
     'ok-dmarc':        { cat: 'auth', pts: -1, sev: 'info', fuente: 'a mano - el 24% del phishing real pasa DMARC' },
-    'ok-dkim':         { cat: 'auth', pts: 0, sev: 'info',  fuente: 'a mano - no distingue por si solo' },
-    'ok-spf':          { cat: 'auth', pts: 0, sev: 'info',  fuente: 'a mano - no distingue por si solo' },
 
-    // --- Identidad del remitente (techo 20) ----------------------------------
-    // From mal formado: coma sin comillas en el nombre visible, que parte la
-    // cabecera en dos. El cliente enseña una cosa y el filtro lee otra.
-    // Aparece en el 18,6% del phishing y en cero correos legitimos de 3.721.
+    'dn-suplanta-propio': { cat: 'identidad', pts: 20, sev: 'high', fuente: 'LR 99.2 (P 5.9% / H 0.00%), recortado al techo' },
+    'from-basura':     { cat: 'identidad', pts: 20, sev: 'high', fuente: 'LR 155.8 (P 6.1% / H 0.04%), recortado al techo' },
     'from-malformed':  { cat: 'identidad', pts: 20, sev: 'high', fuente: 'LR 93.4 (P 18.6% / H 0.0%)' },
     'from-tld':        { cat: 'identidad', pts: 13, sev: 'high', fuente: 'LR 13.3 (P 3.0% / H 0.0%)' },
     'dn-oficial-freemail': { cat: 'identidad', pts: 8, sev: 'high', fuente: 'LR 5.0 (P 0.4% / H <0.1%, regla de tres)' },
@@ -903,42 +743,23 @@
     'from-punycode':   { cat: 'identidad', pts: 12, sev: 'high', fuente: 'sin validar (0% en ambos corpus) - preciso por construccion' },
     'from-lookalike':  { cat: 'identidad', pts: 12, sev: 'high', fuente: 'sin validar - dominio que imita a una marca' },
     'from-freemail-cargo': { cat: 'identidad', pts: 8, sev: 'high', fuente: 'sin validar - patron BEC (FBI IC3)' },
-    'dn-email':        { cat: 'identidad', pts: 0, sev: 'info', fuente: 'LR 0.4 (P 0.4% / H 0.8%) - no distingue' },
-    // Valia 14 puntos. Dispara mas en correo legitimo: las marcas se llaman
-    // por su nombre en su propio correo.
-    'dn-brand':        { cat: 'identidad', pts: 0, sev: 'info', fuente: 'LR 0.9 (P 9.8% / H 11.1%) - no distingue' },
-    'replyto-mismatch':{ cat: 'identidad', pts: 0, sev: 'info', fuente: 'LR 0.3 (P 15.2% / H 46.1%) - no distingue' },
-    'rp-mismatch':     { cat: 'identidad', pts: 0, sev: 'info', fuente: 'LR 0.8 (P 13.8% / H 17.6%) - no distingue' },
-    'mid-mismatch':    { cat: 'identidad', pts: 0, sev: 'info', fuente: 'LR 0.4 (P 28.1% / H 64.0%) - no distingue' },
-    'mid-missing':     { cat: 'identidad', pts: 0, sev: 'info', fuente: 'LR 0.4 (P 0.1% / H 0.0%) - no distingue' },
-    'from-missing':    { cat: 'identidad', pts: 0, sev: 'info', fuente: 'LR 0.3 (P 0.1% / H 0.0%) - no distingue' },
 
-    // --- Enlaces (techo 20) ---------------------------------------------------
     'url-tld':         { cat: 'enlaces', pts: 17, sev: 'high', fuente: 'LR 30.6 (P 6.1% / H 0.0%)' },
+    'url-hosting-gratis': { cat: 'enlaces', pts: 7, sev: 'medium', fuente: 'LR 4.2 (P 8.4% / H 2.03%)' },
     'url-userinfo':    { cat: 'enlaces', pts: 10, sev: 'high', fuente: 'LR 7.9 (P 1.6% / H 0.0%)' },
     'url-shortener':   { cat: 'enlaces', pts: 10, sev: 'medium', fuente: 'LR 7.4 (P 13.3% / H 1.6%)' },
     'url-ip':          { cat: 'enlaces', pts: 6, sev: 'medium', fuente: 'LR 3.3 (P 5.9% / H 1.6%)' },
     'url-subdomains':  { cat: 'enlaces', pts: 5, sev: 'low', fuente: 'LR 2.7 (P 4.9% / H 1.6%)' },
-    // Sin validar: cero apariciones en los tres corpus. Se quedan porque no
-    // aparecen por accidente, pero nadie las ha comprobado.
     'url-rtlo':        { cat: 'enlaces', pts: 15, sev: 'high', fuente: 'sin validar (0% en ambos) - preciso por construccion' },
     'url-zerowidth':   { cat: 'enlaces', pts: 15, sev: 'high', fuente: 'sin validar (0% en ambos) - preciso por construccion' },
     'url-punycode':    { cat: 'enlaces', pts: 14, sev: 'high', fuente: 'sin validar (0% en ambos) - preciso por construccion' },
     'url-multi-at':    { cat: 'enlaces', pts: 12, sev: 'high', fuente: 'sin validar - preciso por construccion' },
     'url-data':        { cat: 'enlaces', pts: 10, sev: 'high', fuente: 'sin validar - preciso por construccion' },
-    // El caso que encabeza el README. LR 1,0: no distingue.
     'url-mismatch':    { cat: 'enlaces', pts: 3, sev: 'low', fuente: 'LR 1.0 (P 3.5% / H 3.2%) - apenas distingue' },
-    'url-no-tld':      { cat: 'enlaces', pts: 0, sev: 'info', fuente: 'LR 1.0 (P 1.6% / H 1.3%) - no distingue' },
-    'url-brand':       { cat: 'enlaces', pts: 0, sev: 'info', fuente: 'LR 0.1 (P 0.8% / H 12.0%) - no distingue' },
-    'url-creds':       { cat: 'enlaces', pts: 0, sev: 'info', fuente: 'LR 0.1 (P 6.7% / H 53.2%) - no distingue' },
-    'url-http':        { cat: 'enlaces', pts: 0, sev: 'info', fuente: 'LR 0.0 (P 0.7% / H 43.6%) - no distingue' },
-    'url-port':        { cat: 'enlaces', pts: 0, sev: 'info', fuente: 'LR 0.0 (P 0.0% / H 1.2%) - no distingue' },
-    'url-filehost':    { cat: 'enlaces', pts: 0, sev: 'info', fuente: 'LR 0.6 (P 0.4% / H 0.5%) - no distingue' },
-    'url-redirector':  { cat: 'enlaces', pts: 0, sev: 'info', fuente: 'informativo' },
 
-    // --- Contenido del mensaje (techo 15) -------------------------------------
     'body-image':      { cat: 'contenido', pts: 15, sev: 'high', fuente: 'LR 29.3 (P 5.8% / H 0.0%), recortado al techo' },
     'subj-urgency':    { cat: 'contenido', pts: 14, sev: 'medium', fuente: 'LR 15.5 (P 5.7% / H 0.2%)' },
+    'body-buzon':      { cat: 'contenido', pts: 15, sev: 'high', fuente: 'LR 81.9 (P 5.4% / H 0.07%), recortado al techo' },
     'subj-premio':     { cat: 'contenido', pts: 12, sev: 'medium', fuente: 'LR 11.2 (P 4.4% / H 0.4%) - medido solo en ingles' },
     'body-crypto':     { cat: 'contenido', pts: 10, sev: 'medium', fuente: 'LR 7.7 (P 13.9% / H 1.6%)' },
     'body-callback':   { cat: 'contenido', pts: 6, sev: 'medium', fuente: 'LR 3.1 (P 0.6% / H 0.0%)' },
@@ -949,17 +770,7 @@
     'body-nocontacto': { cat: 'contenido', pts: 8, sev: 'medium', fuente: 'sin validar - patron BEC' },
     'body-refresh':    { cat: 'contenido', pts: 6, sev: 'medium', fuente: 'sin validar' },
     'body-empty':      { cat: 'contenido', pts: 0, sev: 'info', fuente: 'LR 0.4 - no distingue' },
-    'subj-nothread':   { cat: 'contenido', pts: 0, sev: 'info', fuente: 'LR 1.0 (P 1.9% / H 1.6%) - no distingue' },
-    // El HTML de 2002 llevaba scripts, iframes y formularios de serie, y el
-    // phishing de hoy casi no los usa. Los cuatro disparan mas en correo bueno.
-    'body-form':       { cat: 'contenido', pts: 0, sev: 'info', fuente: 'LR 0.0 (P 0.6% / H 34.0%) - no distingue' },
-    'body-script':     { cat: 'contenido', pts: 0, sev: 'info', fuente: 'LR 0.1 (P 1.6% / H 25.2%) - no distingue' },
-    'body-iframe':     { cat: 'contenido', pts: 0, sev: 'info', fuente: 'LR 0.0 (P 0.7% / H 24.0%) - no distingue' },
-    'body-entities':   { cat: 'contenido', pts: 0, sev: 'info', fuente: 'LR 0.0 (P 0.4% / H 8.4%) - no distingue' },
 
-    // --- Adjuntos (techo 10) --------------------------------------------------
-    // Cero adjuntos peligrosos en 8.613 correos de phishing: hoy el fraude va
-    // por enlace, no por fichero. Se quedan por si acaso, sin validar.
     'att-exec':        { cat: 'adjuntos', pts: 10, sev: 'high', fuente: 'sin validar (0% en el corpus)' },
     'att-archive-nested': { cat: 'adjuntos', pts: 10, sev: 'high', fuente: 'sin validar (0% en el corpus)' },
     'att-macro':       { cat: 'adjuntos', pts: 10, sev: 'high', fuente: 'sin validar (0% en el corpus)' },
@@ -970,26 +781,14 @@
     'att-senuelo':     { cat: 'adjuntos', pts: 10, sev: 'high', fuente: 'LR 17.4 (P 1.4% / H <0.1%, regla de tres), recortado al techo' },
     'att-html':        { cat: 'adjuntos', pts: 6, sev: 'medium', fuente: 'LR 0.6 (P 0.1% / H 0.0%) - pocos datos' },
     'att-ole':         { cat: 'adjuntos', pts: 4, sev: 'medium', fuente: 'sin validar' },
-    'att-container':   { cat: 'adjuntos', pts: 0, sev: 'info', fuente: 'LR 0.1 - no distingue' },
-    'att-empty':       { cat: 'adjuntos', pts: 0, sev: 'info', fuente: 'informativo' },
 
-    // --- Transporte y cabeceras (techo 5) -------------------------------------
     'xmailer':         { cat: 'transporte', pts: 5, sev: 'medium', fuente: 'LR 17.4 (P 3.5% / H 0.0%), recortado por el techo' },
     'date-skew':       { cat: 'transporte', pts: 3, sev: 'low', fuente: 'LR 1.9 (P 1.2% / H 0.4%)' },
     'mime-profundo':   { cat: 'adjuntos', pts: 8, sev: 'high', fuente: 'sin validar (0% en los tres corpus) - evasion por construccion' },
     'rcv-none':        { cat: 'transporte', pts: 3, sev: 'low', fuente: 'sin validar' },
     'date-missing':    { cat: 'transporte', pts: 2, sev: 'low', fuente: 'sin validar' },
-    'rcv-delay':       { cat: 'transporte', pts: 0, sev: 'info', fuente: 'LR 0.1 (P 3.4% / H 22.8%) - no distingue' },
-    'rcv-one':         { cat: 'transporte', pts: 0, sev: 'info', fuente: 'LR ~1 - no distingue' },
-    'x-orig-ip':       { cat: 'transporte', pts: 0, sev: 'info', fuente: 'informativo' }
   };
 
-  // Correlaciones. La de credenciales estaba montada sobre dos indicios
-  // debiles y disparaba catorce veces mas en correo legitimo que en fraude
-  // (1,1% vs 15,2%): pedia (formulario O ruta con palabra de login) Y (marca
-  // en subdominio O texto que no cuadra), y todo eso es un boletin comercial
-  // normal. Ahora exige la contraseña pedida en el propio correo, que es el
-  // hecho que de verdad define el robo de credenciales.
   const COMBOS = [
     { id: 'combo-bec', pts: 22, sev: 'high',
       msg: 'Encaja con el fraude del jefe: alguien que dice ser de la empresa, desde una cuenta que no es la suya, pidiendo un pago',
@@ -1011,12 +810,8 @@
 
   const TECHO_COMBOS = 22;
 
-  // Umbrales del veredicto
-  const UMBRALES = [[80, 'CRITICO'], [50, 'ALTO'], [20, 'MEDIO'], [0, 'BAJO']];
+  const UMBRALES = [[80, 'CRITICO'], [50, 'ALTO'], [18, 'MEDIO'], [0, 'BAJO']];
 
-  // ---------------------------------------------------------------------------
-  // Análisis principal
-  // ---------------------------------------------------------------------------
 
   const TELEFONO = /(?:\+\d{1,3}[\s.\-]?)?(?:\(?\d{3}\)?[\s.\-]?){2}\d{3,4}/;
   const LLAMADA = /(llam[ae]|ll[áa]menos|call us|call now|contact us at|para cancelar|to cancel|customer (care|service|support)|atenci[óo]n al cliente|soporte t[ée]cnico|help ?desk)/i;
@@ -1024,24 +819,24 @@
 
   const URGENCY = /(urgente|inmediat|caduca|expira|vence|suspend|bloquea|bloqueo|último aviso|último aviso|accion requerida|acción requerida|24 horas|48 horas|impag|multa|sanción|sanción|premio|herencia|urgent|immediate|expires?|suspended|action required|final notice|overdue|last warning)/i;
 
-  // Premio, sorteo o bono que nadie ha pedido. El peso sale de medir SOLO los
-  // terminos ingleses, que son los unicos que los dos corpus legitimos -ambos
-  // en ingles- pueden desmentir: LR 11,2 ahi. Los demas idiomas amplian la
-  // cobertura pero no la confianza, asi que van con ese mismo peso y no con el
-  // que saldria de contarlos (que seria medir el idioma, no el fraude).
   const PREMIO = /(has? ganado|ha sido premiad|premio|loter[ií]a|sorteo|has? sido seleccionad|you (have )?won|you'?re a winner|winner|jackpot|free spins?|freispiele|cashback|airdrop|gewonnen|gewinn|vinto|vincita|claim your (prize|bonus|reward)|reclama tu|congratulations[!,. ]|felicidades|prize|lottery|sweepstakes?|bonus (von|sichern))/i;
 
-  // Nombre visible que habla como un departamento y no como una persona. Solo
-  // cuenta junto a un buzon gratuito: un banco no notifica desde Gmail. Suelto
-  // no vale, porque el 0% legitimo que mide es que ningun corpus legitimo trae
-  // correo en español ni en portugues.
   const OFICIAL = /(notifica|aviso|atendimento|comunicado|no-?reply|nao-?responda|helpdesk|suporte|soporte|departamento|ouvidoria|cobran[cç]a|seguran[cç]a|protocolo|setor|central de|fatura|boleto|intima[cç])/i;
+
+  const HOSTING_GRATIS = /(^|\.)(pages\.dev|workers\.dev|netlify\.app|vercel\.app|web\.app|firebaseapp\.com|glitch\.me|repl\.co|replit\.app|b-cdn\.net|ipfs\.io|ipfs\.dweb\.link|weebly\.com|wixsite\.com|github\.io|gitbook\.io|surge\.sh|000webhostapp\.com|r2\.dev|onrender\.com|codesandbox\.io|typedream\.app|framer\.app|softr\.app|carrd\.co)$|(^|\.)s3[.-][a-z0-9-]*\.amazonaws\.com$|(^|\.)blob\.core\.windows\.net$|(^|\.)storage\.googleapis\.com$/i;
+
+  const BUZON = /(storage (is )?full|almost used up|used up your|mailbox (is )?(full|quota)|quota (exceeded|full)|password (will )?expire|expire[sd]? today|expiring password|reactivate your (account|mailbox)|verify your (account|mailbox|email)|validate your (account|mailbox)|held messages|messages? (are )?(on hold|pending release)|release (all )?messages|account (will be )?(suspend|deactivat|clos|terminat)|confirm your (account|identity|email)|update your (mailbox|account details)|revalidate|re-?activate|sign in to (keep|continue|avoid)|buz[oó]n (lleno|est[aá] lleno)|contrase[nñ]a (caduca|expira)|verifica tu cuenta|reactivar? tu cuenta)/i;
+
+  function dominioBasura(dom) {
+    const s = String(dom || '').split('.')[0];
+    if (s.length < 8) return false;
+    const digitos = (s.match(/\d/g) || []).length;
+    const vocales = (s.match(/[aeiou]/gi) || []).length;
+    return (digitos >= 3 && /[a-z]/i.test(s)) || vocales / s.length < 0.2;
+  }
 
   async function analyze(rawLatin1, meta) {
     meta = meta || {};
-    // Un .msg de Outlook es un contenedor OLE2, no un correo RFC 5322. Antes se
-    // parseaba como texto, no salia ninguna cabecera y devolvia BAJO: la
-    // respuesta mas tranquilizadora posible sobre un fichero que no se ha leido.
     if (/^\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1/.test(rawLatin1)) {
       const e = new Error('Esto es un .msg de Outlook, no un correo que pueda leer. ' +
         'En Outlook: abre el correo, Archivo → Guardar como, y elige formato .eml. ' +
@@ -1049,11 +844,6 @@
       e.formatoNoSoportado = 'msg';
       throw e;
     }
-    // El mismo motivo vale para todo lo demas que no sea un correo. Un PDF, un
-    // ZIP, una foto o el cuerpo pegado sin cabeceras se parseaban como texto, no
-    // salia ninguna cabecera y devolvia BAJO: verde tranquilizador sobre un
-    // fichero que no se ha leido. Antes de puntuar nada hay que saber que esto
-    // es un correo.
     const OTROS_FORMATOS = [
       [/^%PDF-/, 'un PDF'], [/^PK\x03\x04/, 'un ZIP (o un .docx/.xlsx, que son ZIP por dentro)'],
       [/^\x89PNG\r\n/, 'una imagen PNG'], [/^\xff\xd8\xff/, 'una imagen JPEG'],
@@ -1072,8 +862,6 @@
 
     const root = parseNode(rawLatin1, 0);
     const H = root.headers;
-    // Sin ninguna de estas cabeceras no hay correo que analizar. Da igual que el
-    // fichero tenga texto: puntuarlo seria inventarse un veredicto.
     if (!['from', 'received', 'subject', 'to', 'date', 'message-id'].some(h => headerGet(H, h))) {
       const e = new Error(rawLatin1.trim()
         ? 'Esto no parece un correo: no tiene ninguna cabecera (From, Subject, Received...). ' +
@@ -1089,7 +877,6 @@
       findings.push({ id, msg, cat: p.cat, sev: p.sev, points: p.pts, fuente: p.fuente || null });
     };
 
-    // --- Identidades
     const from = parseAddressList(headerGet(H, 'from'));
     const replyTo = parseAddressList(headerGet(H, 'reply-to'));
     const returnPath = parseAddressList(headerGet(H, 'return-path'));
@@ -1104,7 +891,6 @@
     const auth = parseAuthResults(H);
     const hops = parseReceived(H);
 
-    // --- Cuerpos
     const textParts = [], htmlParts = [];
     (function walk(n) {
       if (n.mime === 'text/plain' && n.disposition !== 'attachment') textParts.push(nodeText(n));
@@ -1115,103 +901,60 @@
     const html = htmlParts.join('\n\n');
 
     const urls = extractLinks(html, plain, [fromOrg, orgDomain(auth.dkimDomain || '')]);
-    // Muchos correos solo traen HTML: si solo se mira el texto plano, la mitad
-    // de las reglas de contenido no se enteran de nada.
     const textoVisible = (plain + ' ' + decodeEntities(html.replace(/<[^>]+>/g, ' ')))
       .replace(/\s+/g, ' ').trim();
     const attachments = await collectAttachments(root);
 
-    // Un .eml reconstruido o exportado a mano no conserva cabeceras de transporte:
-    // en ese caso su ausencia no es un indicio, solo una limitacion del análisis.
     const noTransport = auth.raw.length === 0 && hops.length === 0;
-    if (noTransport) {
-      push('no-transport', 'El fichero no conserva cabeceras de transporte (Received/Authentication-Results): análisis limitado al contenido');
-    }
 
-    // --- Reglas de autenticación
-    //
-    // Orden importado del RFC 7489: DMARC no es un tercer voto que se suma a
-    // SPF y DKIM, es SU CONCLUSION. "SPF o DKIM pasa Y alinea con el From".
-    // Antes se sumaban los tres y un unico hecho puntuaba tres veces: una
-    // lista de correo reenviada sacaba 75 puntos brutos por un solo fallo.
-    // Ahora SPF y DKIM apenas puntuan por su cuenta, que es exactamente lo
-    // que dicen los corpus: SpamAssassin puntua SPF_FAIL con 0.001 sobre 5.
+
+    // --- 1. ¿Autentica? ------------------------------------------------------
     const S = (v) => (v || '').toLowerCase();
 
-    // ARC (RFC 8617) primero: si la cadena valida, los fallos de SPF y DKIM
-    // son del reenvio, no del autor, y no cuentan. Medido: solo el 2,8% del
-    // phishing real trae ARC valido y fallo de autenticacion a la vez, asi que
-    // esto cuesta poca deteccion y arregla del todo el correo de listas.
     const arcOk = auth.arcChain > 0 && ['pass', 'none', null, ''].indexOf(S(auth.arc)) >= 0;
-    // DMARC es la conclusion de SPF y DKIM (RFC 7489). Si hay veredicto DMARC,
-    // el fallo ya esta contado ahi y sumar los insumos es contarlo tres veces.
     const hayDmarc = ['pass', 'fail', 'none'].indexOf(S(auth.dmarc)) >= 0;
     const sueltos = !hayDmarc && !arcOk;
 
     if (S(auth.spf) === 'fail') { if (sueltos) push('spf-fail', 'SPF fail: el servidor emisor no está autorizado por el dominio del sobre'); }
     else if (S(auth.spf) === 'softfail') { if (sueltos) push('spf-softfail', 'SPF softfail'); }
     else if (S(auth.spf) === 'none' || S(auth.spf) === 'neutral') { if (!arcOk) push('spf-neutral', 'SPF ' + auth.spf + ': el dominio no publica política utilizable'); }
-    else if (S(auth.spf) === 'pass') push('ok-spf', 'SPF pass: el servidor emisor está autorizado');
-    else if (!noTransport) push('spf-absent', 'Sin resultado SPF en las cabeceras');
 
-    if (S(auth.dkim) === 'fail') { if (sueltos) push('dkim-fail', 'DKIM fail: la firma no valida (contenido alterado o firma falsa)'); }
-    else if (S(auth.dkim) === 'pass') push('ok-dkim', 'DKIM pass: la firma del dominio valida');
-    else if (!noTransport) push('dkim-absent', 'El mensaje no viene firmado con DKIM');
+    if (S(auth.dkim) === 'fail' && sueltos) push('dkim-fail', 'DKIM fail: la firma no valida (contenido alterado o firma falsa)');
 
     if (S(auth.dmarc) === 'fail') { if (!arcOk) push('dmarc-fail', 'DMARC fail: no hay alineamiento con el dominio del From'); }
     else if (S(auth.dmarc) === 'none') push('dmarc-none', 'DMARC none: el dominio no publica política DMARC');
     else if (S(auth.dmarc) === 'pass') push('ok-dmarc', 'DMARC pass: el correo viene de donde dice venir');
-    else if (!noTransport) push('dmarc-absent', 'Sin resultado DMARC en las cabeceras');
 
     if (auth.compauth && ['fail', 'softpass', 'none'].indexOf(S(auth.compauth)) >= 0) {
       push('compauth', 'compauth=' + auth.compauth + ' (Microsoft marca autenticación compuesta débil)');
     }
 
-    // ARC (RFC 8617): la cadena de confianza que dejan los reenviadores. Un
-    // DMARC fail con ARC valido es la firma del REENVIO LEGITIMO -causa numero
-    // uno de que el correo bueno falle DMARC-, no la de un fraude. Se parseaba
-    // desde el principio y no se usaba para nada.
     if (arcOk) push('ok-arc', 'Cadena ARC presente (' + auth.arcChain + ' sello(s)): el correo ha pasado por un reenviador que da fe de que autenticaba en origen');
 
-    // Alineamiento manual. Solo cuenta si NO hubo veredicto DMARC: si lo hubo,
-    // esto ya esta contado ahi y sumarlo seria contar dos veces lo mismo.
     const alignment = { spf: null, dkim: null };
     if (fromOrg && auth.spfDomain) alignment.spf = orgDomain(auth.spfDomain) === fromOrg;
     if (fromOrg && auth.dkimDomain) alignment.dkim = orgDomain(auth.dkimDomain) === fromOrg;
-    if (!auth.dmarc) {
-      if (alignment.spf === false && alignment.dkim !== true) {
-        push('align-none', 'Ningún identificador alinea con el From (' + fromOrg + '): SPF=' +
-          (auth.spfDomain || 'n/d') + ', DKIM=' + (auth.dkimDomain || 'sin firma'));
-      } else if (alignment.dkim === false && auth.dkimDomain) {
-        push('align-dkim', 'DKIM firma como ' + auth.dkimDomain + ', no como ' + fromOrg);
-      }
-    }
 
-    // Un correo que autentica de punta a punta. Se usa mas abajo para callar
-    // los indicios debiles que disparan en practicamente todo correo masivo
-    // legitimo (Return-Path del proveedor de envio, texto oculto de plantilla).
     const autentica = S(auth.dmarc) === 'pass' || alignment.dkim === true || arcOk;
 
-    // --- Reglas de identidad
-    if (returnPath[0] && fromOrg && returnPath[0].orgDomain && returnPath[0].orgDomain !== fromOrg && !autentica) {
-      push('rp-mismatch', 'Return-Path (' + returnPath[0].orgDomain + ') distinto del From (' + fromOrg + ')');
-    }
-    if (replyTo[0] && fromOrg && replyTo[0].orgDomain && replyTo[0].orgDomain !== fromOrg) {
-      push('replyto-mismatch', 'Reply-To apunta a ' + replyTo[0].address + ', dominio ajeno al remitente');
-    } else if (replyTo[0] && from[0] && replyTo[0].address.toLowerCase() !== from[0].address.toLowerCase()
-               && FREEMAIL.has(fromOrg)) {
+    // --- 2. ¿Quien escribe de verdad? ----------------------------------------
+    if (replyTo[0] && from[0] && FREEMAIL.has(fromOrg) &&
+        replyTo[0].address.toLowerCase() !== from[0].address.toLowerCase() &&
+        (!replyTo[0].orgDomain || replyTo[0].orgDomain === fromOrg)) {
       push('replyto-freemail', 'La respuesta iría a ' + replyTo[0].address + ', otra cuenta distinta de la que envía');
     }
     if (from[0]) {
       const dn = from[0].name || '';
-      const emailInName = dn.match(/[\w.+-]+@[\w.-]+\.\w+/);
-      if (emailInName && orgDomain(emailInName[0].split('@')[1]) !== fromOrg) {
-        push('dn-email', 'El nombre visible contiene otra dirección (' + emailInName[0] + ') distinta de la real');
-      }
       const dnNorm = dn.toLowerCase().replace(/[^a-z0-9]/g, '');
       const brand = BRANDS.find(b => dnNorm.includes(b));
-      if (brand && fromOrg && !fromOrg.replace(/[^a-z0-9]/g, '').includes(brand)) {
-        push('dn-brand', 'Nombre visible suplanta a "' + brand + '" desde el dominio ' + fromOrg);
+      const miDominio = to[0] && to[0].domain ? orgDomain(to[0].domain) : null;
+      if (dn && miDominio && fromOrg !== miDominio &&
+          dn.toLowerCase().includes(miDominio)) {
+        push('dn-suplanta-propio', 'Se hace pasar por tu propio dominio (' + miDominio +
+          ') pero escribe desde ' + fromOrg);
+      }
+      if (dominioBasura(from[0].domain)) {
+        push('from-basura', 'El dominio del remitente parece generado a máquina: ' + from[0].domain);
       }
       if (dn && FREEMAIL.has(fromOrg) && (brand || OFICIAL.test(dn))) {
         push('dn-oficial-freemail', 'Firma como un departamento o una marca ("' + dn.slice(0, 40) +
@@ -1241,31 +984,17 @@
       if (parecido) {
         push('from-lookalike', 'El dominio ' + fromOrg + ' imita a "' + parecido + '" cambiando o quitando letras');
       }
-    } else {
-      push('from-missing', 'Sin cabecera From');
     }
 
-    if (!messageId) { if (!noTransport) push('mid-missing', 'Sin Message-ID: generado por herramienta de envio masivo o script'); }
-    else {
-      const mdom = (messageId.match(/@([^>\s]+)>?\s*$/) || [])[1];
-      if (mdom && fromOrg && orgDomain(mdom) !== fromOrg && !autentica) {
-        push('mid-mismatch', 'Dominio del Message-ID (' + orgDomain(mdom) + ') distinto del From');
-      }
-    }
 
     const xMailer = headerGet(H, 'x-mailer') || headerGet(H, 'user-agent') || '';
     if (/phpmailer|sendmail|python|swiftmailer|mass|bulk|axigen|smtplib|mailer\s*script/i.test(xMailer)) {
       push('xmailer', 'X-Mailer sospechoso: ' + xMailer.trim());
     }
-    if (headerGet(H, 'x-originating-ip')) {
-      push('x-orig-ip', 'X-Originating-IP: ' + headerGet(H, 'x-originating-ip').replace(/[\[\]]/g, ''));
-    }
 
-    // --- Received
+    // --- Por donde ha pasado -------------------------------------------------
     if (hops.length === 0) { if (!noTransport) push('rcv-none', 'Sin cabeceras Received: mensaje inyectado localmente o cabeceras eliminadas'); }
-    else if (hops.length === 1) push('rcv-one', 'Un único salto Received: entrega directa al MX');
     const bigDelay = hops.find(h => h.delaySeconds !== null && h.delaySeconds > 3600);
-    if (bigDelay) push('rcv-delay', 'Salto con ' + Math.round(bigDelay.delaySeconds / 60) + ' min de retardo (hop ' + bigDelay.hop + ')');
     if (!dateHdr && !noTransport) push('date-missing', 'Sin cabecera Date');
     if (dateHdr && hops.length) {
       const first = hops.find(h => h.ts);
@@ -1279,27 +1008,16 @@
       return null;
     })();
 
-    // --- Asunto / cuerpo
+    // --- 4. ¿Que te pide? ---------------------------------------------------
     if (URGENCY.test(subject)) push('subj-urgency', 'Asunto con lenguaje de urgencia/presión');
-    // Ojo: un reenvío (Fwd:/RV:) sí puede no tener In-Reply-To de forma legítima.
-    // Solo cuenta cuando dice ser una respuesta.
-    if (/^\s*re\s*:/i.test(subject) && !headerGet(H, 'in-reply-to') && !headerGet(H, 'references')) {
-      push('subj-nothread', 'Simula responder a un hilo que nunca existió: no hay In-Reply-To ni References');
-    }
     if (html) {
-      if (/<form\b/i.test(html)) push('body-form', 'Formulario HTML embebido en el correo (captura de credenciales)');
       if (/type\s*=\s*["']?password/i.test(html)) push('body-password', 'Campo de contraseña en el HTML del correo');
-      if (/<script\b/i.test(html)) push('body-script', 'Etiqueta <script> en el cuerpo');
-      if (/<iframe\b/i.test(html)) push('body-iframe', 'iframe embebido');
       if (/http-equiv\s*=\s*["']?refresh/i.test(html)) push('body-refresh', 'meta refresh: redirección automatica');
       const invisible = html.match(/(font-size\s*:\s*0|display\s*:\s*none|visibility\s*:\s*hidden|color\s*:\s*#?f{3,6}\b)/gi);
       if (invisible && invisible.length >= 2 && !autentica) push('body-hidden', 'Texto oculto/invisible (' + invisible.length + ' ocurrencias): evasión de filtros');
       const textLen = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().length;
       const imgs = (html.match(/<img\b/gi) || []).length;
       if (imgs > 0 && textLen < 120) push('body-image', 'Correo casi solo imagen (' + imgs + ' img, ' + textLen + ' chars): evasión de análisis textual');
-      if (/&#x?[0-9a-f]{2,};/i.test(html) && (html.match(/&#x?[0-9a-f]{2,};/gi) || []).length > 40) {
-        push('body-entities', 'Uso masivo de entidades HTML: ofuscacion');
-      }
     }
     if (!html && !plain && attachments.length) push('body-empty', 'Cuerpo vacio con adjunto: patron de malware/spear-phishing');
     if (/(bitcoin|btc|usdt|ethereum|monero|wallet|seed phrase|frase semilla|criptomoneda)/i.test(textoVisible + ' ' + subject)) {
@@ -1312,10 +1030,6 @@
     if (IBAN_RE.test(textoVisible) && pinta_bec) {
       push('body-iban', 'Da un número de cuenta (IBAN) dentro del correo para que hagas el ingreso ahí');
     }
-    // Estafa del "llame para cancelar": una factura o renovacion que no has
-    // pedido y un telefono, sin enlaces ni adjuntos. Esta hecha justamente para
-    // no dejar nada que analizar, asi que si no se busca el telefono no queda
-    // ningun indicio.
     if (urls.filter(u => u.tipo === 'enlace').length === 0 && TELEFONO.test(textoVisible) &&
         LLAMADA.test(textoVisible) && COBRO.test(textoVisible + ' ' + subject)) {
       push('body-callback', 'Te da un teléfono para cancelar un cobro que no has hecho, y ningún enlace: la estafa consiste en que llames');
@@ -1323,24 +1037,28 @@
     if (/(no me llames|no llames|no puedo hablar|estoy en una reunion|estoy en una reunión|no digas nada|es confidencial)/i.test(textoVisible)) {
       push('body-nocontacto', 'Pide que no le llames ni lo comentes: sirve para que nadie verifique la petición');
     }
-    // Las tres siguientes miran lo que dice el correo, no el sobre. Son las
-    // unicas que le llegan al fraude que autentica bien porque se manda desde
-    // una cuenta de verdad, robada o gratuita: ahi SPF, DKIM y DMARC pasan y no
-    // queda nada mas que leer.
     if (PREMIO.test(subject)) {
       push('subj-premio', 'El asunto anuncia un premio, un sorteo o un bono que no has pedido');
+    }
+    if (BUZON.test(subject) || BUZON.test(textoVisible.slice(0, 2500))) {
+      push('body-buzon', 'Dice que tu buzón se llena, que tu contraseña caduca o que tienes correo retenido: es la excusa más usada para que metas la contraseña');
+    }
+    for (const u of urls) {
+      if (u.tipo === 'enlace' && HOSTING_GRATIS.test(u.host || '')) {
+        push('url-hosting-gratis', 'El enlace lleva a una página alojada gratis (' + defang(u.host) +
+          '), no a la web de la empresa que dice ser');
+        break;
+      }
     }
     if (urls.filter(u => u.tipo === 'enlace').length === 0 && attachments.length && textoVisible.length < 400) {
       push('att-senuelo', 'Cuatro líneas y un adjunto, sin un solo enlace: todo el mensaje está en el fichero para que lo abras');
     }
-    // Ningun correo legitimo mete catorce sobres uno dentro de otro. Cuando pasa
-    // es para que el analisis se pare antes de llegar al fondo.
     const truncado = (function hay(n) { return !!n.truncado || n.children.some(hay); })(root);
     if (truncado) {
       push('mime-profundo', 'El mensaje anida partes tan hondo que he dejado de abrirlas: puede haber algo escondido ahí debajo');
     }
 
-    // --- Puntos de URLs y adjuntos
+    // --- 3 y 5. ¿A donde te lleva? ¿Que trae? --------------------------------
     const seenUrlFlags = new Set();
     for (const u of urls) {
       for (const f of u.flags) {
@@ -1354,13 +1072,11 @@
       for (const f of a.flags) push(f.id, f.msg + ' [' + a.filename + ']');
     }
 
-    // --- Combinaciones: correlaciones que valen más que la suma de sus partes
     const disparadas = new Set(findings.map(f => f.id));
     for (const c of COMBOS) {
       if (c.si(disparadas)) findings.push({ id: c.id, msg: c.msg, cat: 'combinacion', sev: c.sev, points: c.pts });
     }
 
-    // --- Score: suma dentro de cada categoría, cada categoría con su techo
     const desglose = Object.keys(CATEGORIAS).map(cat => {
       const dela = findings.filter(f => f.cat === cat);
       const bruto = dela.reduce((s, f) => s + (f.points || 0), 0);
@@ -1377,7 +1093,6 @@
     const score = Math.max(0, Math.min(100, desglose.reduce((s, d) => s + d.puntos, 0)));
     const verdict = UMBRALES.find(([min]) => score >= min)[1];
 
-    // --- IOCs
     const iocDomains = new Set();
     const iocUrls = new Set();
     const iocIPs = new Set();
@@ -1440,7 +1155,5 @@
     return { label, children: node.children.map(c => describeStructure(c)) };
   }
 
-  // Solo lo que usan de verdad la interfaz y los tests. Todo lo demas es
-  // interno: exportarlo era prometer una API que nadie llamaba.
   return { analyze, bytesToLatin1, defang, orgDomain, isPrivateIP, md5 };
 });

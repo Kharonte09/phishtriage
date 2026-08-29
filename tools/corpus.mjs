@@ -30,7 +30,6 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PT = require(path.join(ROOT, 'assets/parser.js'));
 
 const args = process.argv.slice(2);
-// Sueltos = los que no son ni una opcion ni el valor que va detras de una.
 const sueltos = args.filter((a, i) => !a.startsWith('--') && !(i > 0 && args[i - 1].startsWith('--')));
 const opt = k => { const i = args.indexOf('--' + k); return i >= 0 ? args[i + 1] : null; };
 const [carpeta, carpetaHam] = sueltos;
@@ -47,7 +46,6 @@ if (esperado && !['phishing', 'legitimo'].includes(esperado)) {
   process.exit(2);
 }
 
-// --- recoger y analizar -----------------------------------------------------
 function* ficheros(dir) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, e.name);
@@ -56,8 +54,6 @@ function* ficheros(dir) {
   }
 }
 
-// Un mbox es un fichero con muchos correos pegados, separados por una linea
-// "From remitente fecha" a principio de linea.
 function partirMbox(txt) {
   return txt.split(/^From \S+.*$/m).map(t => t.replace(/^\r?\n/, ''))
     .filter(t => /^[\w-]+\s*:/m.test(t) && t.trim().length > 40);
@@ -69,8 +65,6 @@ async function analizar(carpeta) {
   for (const f of ficheros(carpeta)) {
     let txt;
     try { txt = PT.bytesToLatin1(new Uint8Array(fs.readFileSync(f))); } catch (e) { continue; }
-    // Un mbox se reconoce porque empieza por "From " en el primer byte. Un .eml
-    // suelto empieza por una cabecera con dos puntos.
     const partes = /^From \S+/.test(txt) ? partirMbox(txt) : [txt];
     for (let i = 0; i < partes.length; i++) {
       if (!/^[\w-]+\s*:/m.test(partes[i])) continue;
@@ -89,21 +83,17 @@ async function analizar(carpeta) {
   return { r: salida, fallos };
 }
 
-// Cuantos correos hacen saltar cada regla (una vez por correo, no una por vez).
 const disparos = res => {
   const d = {};
   for (const x of res) for (const id of new Set(x.reglas)) d[id] = (d[id] || 0) + 1;
   return d;
 };
 
-// --- modo comparacion: dos corpus, razon de verosimilitud -------------------
 if (carpetaHam) {
   const A = await analizar(carpeta), B = await analizar(carpetaHam);
   const dA = disparos(A.r), dB = disparos(B.r);
   console.log('phishing: ' + A.r.length + ' correos    legitimo: ' + B.r.length + ' correos');
 
-  // Correccion de Laplace: sin ella una regla que no aparece nunca en el correo
-  // bueno da razon infinita, que es mentira, solo es que no hay bastantes datos.
   const filas = [...new Set([...Object.keys(dA), ...Object.keys(dB)])].map(id => ({
     id,
     phish: 100 * (dA[id] || 0) / A.r.length,
@@ -122,7 +112,6 @@ if (carpetaHam) {
   process.exit(0);
 }
 
-// --- modo normal: un corpus -------------------------------------------------
 const { r: resultados, fallos } = await analizar(carpeta);
 const total = resultados.length;
 console.log('Analizando ' + total + ' correos de ' + carpeta + '\n');
@@ -140,10 +129,9 @@ for (const v of ORDEN) {
 console.log('  media ' + (resultados.reduce((s, r) => s + r.score, 0) / total).toFixed(1) + '/100' +
   (fallos ? '   (' + fallos + ' no se pudieron analizar)' : ''));
 
-// --- en que se ha equivocado ------------------------------------------------
 if (esperado) {
   const phish = esperado === 'phishing';
-  const mal = resultados.filter(r => phish ? r.score < 50 : r.score >= 20)
+  const mal = resultados.filter(r => phish ? r.score < 50 : r.score >= 18)
     .sort((a, b) => phish ? a.score - b.score : b.score - a.score);
   console.log('\nEsperado: ' + esperado + '. Acierta en el ' + (100 * (total - mal.length) / total).toFixed(1) +
     '% (' + (total - mal.length) + '/' + total + ')');
@@ -156,7 +144,6 @@ if (esperado) {
       if (r.reglas.length) console.log('      ' + r.reglas.join(' '));
     }
   }
-  // Que reglas mandan en los correos que falla: por ahi se empieza a afinar.
   const top = Object.entries(disparos(mal)).sort((a, b) => b[1] - a[1]).slice(0, 12);
   if (top.length) {
     console.log('\nReglas que mas aparecen en los fallos:');
