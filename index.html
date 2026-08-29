@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PhishTriage - análisis de correos sospechosos</title>
-<meta name="description" content="Analizador de correos .eml en el navegador: cabeceras, SPF/DKIM/DMARC, cadena Received, URLs defanged, hashes de adjuntos e IOCs. Sin subir nada a ningún servidor.">
-<meta name="color-scheme" content="dark">
+<title>PhishTriage - ¿es una estafa este correo?</title>
+<meta name="description" content="Suelta un correo sospechoso y te dice si es una estafa, por qué, y qué hacer. Se analiza dentro de tu navegador: no se sube a ningún sitio.">
+<meta name="color-scheme" content="light dark">
 <link rel="stylesheet" href="assets/styles.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#127907;</text></svg>">
 </head>
@@ -14,17 +14,23 @@
 <header class="top">
   <div class="wrap">
     <div class="logo">phish<span>triage</span></div>
-    <div class="tagline">Análisis de correos sospechosos.</div>
-    <span class="badge-offline" id="offlineBadge">100% en tu navegador</span>
+    <div class="tagline">&iquest;Te ha llegado un correo raro? M&iacute;ralo aqu&iacute; antes de tocar nada.</div>
+    <span class="badge-offline" id="offlineBadge">No sale de tu ordenador</span>
   </div>
 </header>
 
 <main class="wrap">
 
+  <ol class="pasos">
+    <li><b>1</b><span>Descarga el correo, o c&oacute;pialo entero.</span></li>
+    <li><b>2</b><span>Su&eacute;ltalo aqu&iacute; abajo, o p&eacute;galo con <b>Ctrl+V</b>.</span></li>
+    <li><b>3</b><span>Te digo si te puedes fiar y qu&eacute; hacer.</span></li>
+  </ol>
+
   <div id="drop">
-    <h2>Arrastra aquí el correo</h2>
-    <p>O haz clic para buscarlo. También puedes copiarlo y pegarlo con <b>Ctrl+V</b>.</p>
-    <p class="hint muted">No se sube a ningún sitio. Se abre aquí, en tu ordenador.</p>
+    <h2>Arrastra aqu&iacute; el correo</h2>
+    <p>O haz clic para buscarlo en tu ordenador.</p>
+    <p class="hint muted">Se abre aqu&iacute; dentro, en tu navegador. No se env&iacute;a a ning&uacute;n servidor.</p>
     <input type="file" id="file" accept=".eml,.txt,message/rfc822" multiple hidden>
   </div>
 
@@ -32,34 +38,40 @@
     <button id="btnReset" disabled>Analizar otro correo</button>
   </div>
 
-  <details class="card" style="margin-top:14px">
-    <summary style="cursor:pointer">&iquest;C&oacute;mo saco el correo de mi programa?</summary>
-    <table style="margin-top:10px">
+  <details class="ayuda" style="margin-top:16px">
+    <summary>&iquest;C&oacute;mo descargo el correo?</summary>
+    <p class="small">Necesitas el fichero del correo, no una captura de pantalla. Segu&uacute;n lo que uses:</p>
+    <table>
       <tr><td class="k">Gmail</td><td class="v">Abre el correo &rarr; men&uacute; <b>&#8942;</b> &rarr; <b>Descargar mensaje</b>.</td></tr>
-      <tr><td class="k">Outlook (programa)</td><td class="v">Arrastra el correo al escritorio.</td></tr>
+      <tr><td class="k">Outlook (programa)</td><td class="v">Arrastra el correo desde la lista hasta el escritorio.</td></tr>
       <tr><td class="k">Outlook (web)</td><td class="v">Abre el correo en otra ventana &rarr; <b>&#8942;</b> &rarr; <b>Guardar como</b>.</td></tr>
       <tr><td class="k">Apple Mail</td><td class="v">Arrastra el correo a una carpeta.</td></tr>
       <tr><td class="k">Thunderbird</td><td class="v">Clic derecho &rarr; <b>Guardar como &rarr; Archivo</b>.</td></tr>
-      <tr><td class="k">Si no te aclaras</td><td class="v">Busca <b>mensaje original</b> o <b>ver c&oacute;digo fuente</b>,
-        selecciona todo, c&oacute;pialo y p&eacute;galo aqu&iacute; con <b>Ctrl+V</b>.</td></tr>
     </table>
+    <p class="small" style="margin-bottom:0">Si no lo encuentras, hay un atajo que funciona en todos: busca la opci&oacute;n
+      <b>mensaje original</b> o <b>ver c&oacute;digo fuente</b>, selecciona todo el texto que salga,
+      c&oacute;pialo y p&eacute;galo aqu&iacute; con <b>Ctrl+V</b>.</p>
   </details>
 
   <div id="result" hidden>
-    <div class="verdict">
-      <svg class="score-ring" viewBox="0 0 42 42" aria-hidden="true">
-        <circle cx="21" cy="21" r="17" fill="none" stroke="#22303f" stroke-width="5"></circle>
+    <div class="verdict" id="verdictBox">
+      <svg class="score-ring" viewBox="0 0 42 42" role="img" aria-labelledby="ringLabel">
+        <title id="ringLabel">Nota de riesgo</title>
+        <circle cx="21" cy="21" r="17" fill="none" stroke="currentColor" stroke-width="5" opacity=".18"></circle>
         <circle id="ring" cx="21" cy="21" r="17" fill="none" stroke="currentColor" stroke-width="5"
                 stroke-dasharray="0 107" stroke-linecap="round" transform="rotate(-90 21 21)"></circle>
-        <text id="ringTxt" x="21" y="24.5" text-anchor="middle" font-size="11" fill="currentColor"
-              font-family="ui-monospace, monospace">0</text>
+        <text id="ringTxt" x="21" y="24.5" text-anchor="middle" font-size="12" fill="currentColor"
+              font-weight="700" font-family="ui-monospace, monospace">0</text>
       </svg>
       <div class="verdict-main">
         <h2 id="verdictTitle">-</h2>
-        <div class="sub" id="verdictSub"></div>
+        <div class="lede" id="verdictLede"></div>
+        <div class="verdict-nota" id="verdictNota"></div>
       </div>
-      <div class="chips" id="authChips"></div>
     </div>
+
+    <!-- El correo que se esta mirando -->
+    <div class="sobre" id="sobre"></div>
 
     <!-- Lo que ve todo el mundo. Nunca se oculta. -->
     <section id="p-simple" class="simple-view"></section>
@@ -68,9 +80,9 @@
       <button id="btnAdv" class="adv-toggle" aria-expanded="false" aria-controls="advanced">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
-        <span id="btnAdvTxt">Ver detalle t&eacute;cnico</span>
+        <span id="btnAdvTxt">Ver el an&aacute;lisis completo</span>
       </button>
-      <span class="small muted">Cabeceras, enlaces, adjuntos&hellip; Solo si sabes lo que buscas.</span>
+      <span class="small muted">Cabeceras, autenticaci&oacute;n, enlaces, adjuntos e IOCs. Para quien sepa qu&eacute; est&aacute; mirando.</span>
     </div>
 
     <div id="advanced" hidden>
@@ -79,8 +91,8 @@
         <button data-p="hallazgos">Hallazgos <span class="n" id="nFind"></span></button>
         <button data-p="cabeceras">Cabeceras <span class="n" id="nHead"></span></button>
         <button data-p="auth">Autenticación</button>
-        <button data-p="received">Received <span class="n" id="nHops"></span></button>
-        <button data-p="urls">URLs <span class="n" id="nUrls"></span></button>
+        <button data-p="received">Ruta <span class="n" id="nHops"></span></button>
+        <button data-p="urls">Enlaces <span class="n" id="nUrls"></span></button>
         <button data-p="adjuntos">Adjuntos <span class="n" id="nAtt"></span></button>
         <button data-p="cuerpo">Cuerpo</button>
         <button data-p="iocs">IOCs</button>
@@ -103,11 +115,11 @@
   <div id="multi" hidden></div>
 
   <footer>
-    PhishTriage &middot; Lo analiza un programa, no una persona. Comprueba siempre por tu cuenta antes de dar algo por seguro.
-    &middot; <a href="https://github.com/Kharonte09/phishtriage" target="_blank" rel="noopener noreferrer">código fuente</a>
+    Lo analiza un programa, no una persona. Pilla las estafas de siempre, pero ni las detecta
+    todas ni acierta siempre: ante la duda, comprueba por tu cuenta.
+    &middot; <a href="https://github.com/Kharonte09/phishtriage" target="_blank" rel="noopener noreferrer">c&oacute;digo fuente</a>
   </footer>
 </main>
-
 
 <script src="assets/parser.js"></script>
 <script src="assets/ui.js"></script>

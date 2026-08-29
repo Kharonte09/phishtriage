@@ -181,6 +181,13 @@ const pesos = (() => {
   return new Set(Array.from(bloque.slice(0, bloque.search(/\n\s*\};/))
     .matchAll(/'([a-z0-9-]+)':\s*\{ cat:/g)).map(m => m[1]));
 })();
+const TECHOS = (() => {
+  const src = fs.readFileSync(path.join(ROOT, 'assets/parser.js'), 'utf8');
+  const b = src.slice(src.indexOf('const CATEGORIAS = {'));
+  const o = {};
+  for (const m of b.slice(0, b.indexOf('};')).matchAll(/(\w+):\s*\{ techo: (\d+)/g)) o[m[1]] = +m[2];
+  return o;
+})();
 check('los techos de las categorías suman 100',
   r.scoreBreakdown.filter(d => d.cat !== 'combinacion').reduce((s, d) => s + d.techo, 0) === 100);
 check('las combinaciones no pasan de 20',
@@ -191,6 +198,136 @@ check('el total es la suma del desglose, con tope 100',
 check('cada regla que dispara tiene su peso',
   ids.filter(i => !i.startsWith('combo-')).every(i => pesos.has(i)),
   ids.filter(i => !i.startsWith('combo-') && !pesos.has(i)).join());
+
+
+// --- correo legitimo que la primera version suspendia -----------------------
+// Los cuatro salian MEDIO por motivos que no tenian nada que ver con el fraude.
+
+// Boletin normal mandado por un proveedor de envio masivo. El Return-Path es
+// del proveedor, como en todo el correo comercial del mundo. Sacaba 43.
+const ESP = [
+  'Authentication-Results: mx.corp.es; spf=pass smtp.mailfrom=mail112.suw15.mcsv.net;',
+  ' dkim=pass header.d=marca.com; dmarc=pass header.from=marca.com',
+  'Received: from mail112.suw15.mcsv.net (mail112.suw15.mcsv.net [198.2.134.112])',
+  ' by mx.corp.es with ESMTPS id A1; Mon, 10 Aug 2026 09:00:00 +0200',
+  'Return-Path: <bounce-mc.us1_123@mail112.suw15.mcsv.net>',
+  'From: Marca <hola@marca.com>', 'Reply-To: hola@marca.com', 'To: maria@corp.es',
+  'Subject: Novedades de agosto', 'Message-ID: <1@mail112.suw15.mcsv.net>',
+  'List-Unsubscribe: <https://marca.us1.list-manage.com/unsubscribe?u=1>',
+  'Date: Mon, 10 Aug 2026 09:00:00 +0200', 'Content-Type: text/html; charset="utf-8"', '',
+  '<html><body><p>Hola, esto es el boletin de agosto con las novedades de la tienda',
+  ' y algunas ofertas que te pueden interesar durante todo el mes.</p>',
+  '<a href="https://marca.us1.list-manage.com/track/click?u=1&id=2">Ver las ofertas</a>',
+  '</body></html>', ''
+].join('\r\n');
+
+// Lista de correo: el reenvio rompe SPF y DKIM y por tanto DMARC, pero la
+// cadena ARC da fe de que en origen autenticaba. Sacaba 48, casi ALTO.
+const LISTA = [
+  'ARC-Seal: i=1; a=rsa-sha256; d=lista.org; s=arc; b=abc',
+  'ARC-Authentication-Results: i=1; lista.org; spf=pass smtp.mailfrom=autor.com;',
+  ' dkim=pass header.d=autor.com; dmarc=pass header.from=autor.com',
+  'Authentication-Results: mx.corp.es; spf=fail smtp.mailfrom=lista.org;',
+  ' dkim=fail header.d=autor.com; dmarc=fail header.from=autor.com',
+  'Received: from mx.lista.org (mx.lista.org [93.184.216.34]) by mx.corp.es',
+  ' with ESMTPS id A1; Mon, 10 Aug 2026 09:00:00 +0200',
+  'Return-Path: <bounces@lista.org>',
+  'From: Autor <autor@autor.com>', 'To: lista@lista.org', 'Subject: [lista] Acta de la reunion',
+  'Message-ID: <1@autor.com>', 'Date: Mon, 10 Aug 2026 09:00:00 +0200',
+  'Content-Type: text/plain; charset="utf-8"', '', 'Adjunto el acta de la reunion de ayer.', ''
+].join('\r\n');
+
+// Correo corriente que paso por un servidor que no sella Authentication-Results.
+// Sacaba 29 solo por lo que le faltaba a las cabeceras.
+const SINAR = [
+  'Received: from mx.proveedor.es (mx.proveedor.es [81.44.1.10]) by mx.corp.es',
+  ' with ESMTPS id A1; Mon, 10 Aug 2026 09:00:00 +0200',
+  'From: Ana Lopez <ana@proveedor.es>', 'To: maria@corp.es', 'Subject: Presupuesto revisado',
+  'Message-ID: <1@proveedor.es>', 'Date: Mon, 10 Aug 2026 09:00:00 +0200',
+  'Content-Type: text/plain; charset="utf-8"', '', 'Te adjunto el presupuesto. Un saludo.', ''
+].join('\r\n');
+
+// Nombre polaco corriente. El regex de homoglifos cazaba Latin Extended-A,
+// donde viven la ł, la ć y la š: sacaba 15 por llamarse Michał.
+const ESLAVO = [
+  'Authentication-Results: mx.corp.es; spf=pass smtp.mailfrom=firma.pl;',
+  ' dkim=pass header.d=firma.pl; dmarc=pass header.from=firma.pl',
+  'Received: from mx.firma.pl (mx.firma.pl [93.184.216.34]) by mx.corp.es',
+  ' with ESMTPS id A1; Mon, 10 Aug 2026 09:00:00 +0200',
+  'From: =?utf-8?B?TWljaGHFgiBOb3dhaw==?= <michal@firma.pl>', 'To: maria@corp.es',
+  'Subject: Oferta', 'Message-ID: <1@firma.pl>', 'Date: Mon, 10 Aug 2026 09:00:00 +0200',
+  'Content-Type: text/plain; charset="utf-8"', '', 'Buenos dias, le paso la oferta.', ''
+].join('\r\n');
+
+// Y el homoglifo de verdad: una "а" cirilica dentro de "paypal".
+const HOMOGLIFO = [
+  'Authentication-Results: mx.corp.es; spf=fail smtp.mailfrom=evil.com; dkim=none;',
+  ' dmarc=fail header.from=evil.com',
+  'Received: from x.evil.com (x.evil.com [45.9.1.2]) by mx.corp.es with ESMTPS id A1;',
+  ' Mon, 10 Aug 2026 09:00:00 +0200',
+  'From: =?utf-8?B?' + Buffer.from('Seguridad pаypal', 'utf8').toString('base64') + '?= <a@evil.com>',
+  'To: maria@corp.es', 'Subject: Verifica tu cuenta', 'Message-ID: <1@evil.com>',
+  'Date: Mon, 10 Aug 2026 09:00:00 +0200', 'Content-Type: text/plain; charset="utf-8"', '',
+  'Verifica tu cuenta.', ''
+].join('\r\n');
+
+console.log('\n== correo legitimo que la version anterior suspendia ==');
+const esp = await analizar(ESP, 'esp.eml');
+const lista = await analizar(LISTA, 'lista.eml');
+const sinar = await analizar(SINAR, 'sinar.eml');
+const eslavo = await analizar(ESLAVO, 'eslavo.eml');
+
+check('boletin de un proveedor de envio masivo (antes 43)',
+  esp.verdict === 'BAJO', esp.verdict + ' ' + esp.score + ' ' + esp.findings.map(f => f.id));
+check('el Return-Path del proveedor ya no cuenta si el correo autentica',
+  !esp.findings.some(f => f.id === 'rp-mismatch'));
+check('lista de correo reenviada con ARC valido (antes 48)',
+  lista.verdict === 'BAJO', lista.verdict + ' ' + lista.score + ' ' + lista.findings.map(f => f.id));
+check('la cadena ARC se tiene en cuenta y resta',
+  lista.findings.some(f => f.id === 'ok-arc' && f.points < 0));
+check('un DMARC fail ya no puntua tres veces',
+  lista.scoreBreakdown.find(d => d.cat === 'auth').bruto <= 15,
+  'bruto de auth: ' + lista.scoreBreakdown.find(d => d.cat === 'auth').bruto);
+check('correo sin Authentication-Results (antes 29)',
+  sinar.score === 0, sinar.verdict + ' ' + sinar.score + ' ' + sinar.findings.map(f => f.id));
+check('un nombre polaco no es un homoglifo (antes 15)',
+  eslavo.verdict === 'BAJO' && !eslavo.findings.some(f => f.id === 'dn-mixed-script'),
+  eslavo.verdict + ' ' + eslavo.score);
+
+const homo = await analizar(HOMOGLIFO, 'homoglifo.eml');
+check('pero una "a" cirilica dentro de "paypal" si lo es',
+  homo.findings.some(f => f.id === 'dn-mixed-script'), homo.findings.map(f => f.id).join());
+
+console.log('\n== robustez ==');
+const roto = await analizar('From: a@b.com\r\nSubject: x\r\nContent-Type: text/html\r\n\r\n<p>&#x110000;</p>\r\n', 'roto.eml');
+check('una entidad HTML fuera de rango no tumba el analisis', roto.verdict === 'BAJO');
+
+console.log('\n== los pesos vienen de algun sitio ==');
+const conFuente = (() => {
+  const src = fs.readFileSync(path.join(ROOT, 'assets/parser.js'), 'utf8');
+  const b = src.slice(src.indexOf('const PESOS = {'));
+  return Array.from(b.slice(0, b.indexOf('\n  };'))
+    .matchAll(/'([a-z0-9-]+)':\s*\{ cat: '([a-z]+)', pts: (-?\d+), sev: '(\w+)',?\s*(?:\r?\n\s*)?fuente: '([^']*)'/g))
+    .map(m => ({ id: m[1], cat: m[2], pts: +m[3], fuente: m[5] }));
+})();
+check('todas las reglas declaran de donde sale su peso',
+  conFuente.length === pesos.size, conFuente.length + ' de ' + pesos.size);
+check('la mayoria del peso viene de un motor real, no de mi criterio',
+  conFuente.filter(r => /^(SA|RSP)/.test(r.fuente)).length >= conFuente.length / 2,
+  conFuente.filter(r => /^(SA|RSP)/.test(r.fuente)).length + ' ancladas de ' + conFuente.length);
+check('hay pesos negativos: sin mitigantes todo correo reenviado es sospechoso',
+  conFuente.some(r => r.pts < 0));
+check('ninguna regla se pasa sola del techo de su categoria',
+  conFuente.every(r => r.pts <= TECHOS[r.cat]),
+  conFuente.filter(r => r.pts > TECHOS[r.cat]).map(r => r.id + '=' + r.pts + '>' + TECHOS[r.cat]).join());
+
+console.log('\n== la vista sencilla no se queda muda ==');
+const uiSrc = fs.readFileSync(path.join(ROOT, 'assets/ui.js'), 'utf8');
+const bloqueUI = uiSrc.slice(uiSrc.indexOf('const EN_CRISTIANO = {'));
+const frases = new Set(Array.from(bloqueUI.slice(0, bloqueUI.indexOf('\n  };'))
+  .matchAll(/'([a-z0-9-]+)':/g)).map(m => m[1]));
+const mudas = conFuente.filter(r => r.pts > 0 && !frases.has(r.id)).map(r => r.id);
+check('toda regla que suma tiene su frase en castellano llano', mudas.length === 0, mudas.join(' '));
 
 // --- interfaz (solo si hay jsdom) --------------------------------------------
 let JSDOM;
@@ -230,7 +367,17 @@ if (!JSDOM) {
   }
 
   check('la interfaz pinta el resultado', !d.querySelector('#result').hidden);
-  check('el veredicto sale en pantalla', /CRITICO/.test(d.querySelector('#verdictTitle').textContent));
+  // El titular va en cristiano; la etiqueta tecnica queda debajo, en pequeño
+  check('el veredicto se lee sin saber de esto',
+    /estafa/i.test(d.querySelector('#verdictTitle').textContent),
+    d.querySelector('#verdictTitle').textContent);
+  check('y la etiqueta tecnica sigue estando',
+    /CRÍTICO/.test(d.querySelector('#verdictNota').textContent) &&
+    /100 de 100/.test(d.querySelector('#verdictNota').textContent),
+    d.querySelector('#verdictNota').textContent);
+  check('se ve de quién viene el correo',
+    /micros0ft-security\.tk/.test(d.querySelector('#sobre').textContent),
+    d.querySelector('#sobre').textContent.slice(0, 90));
   check('la vista sencilla se ve sin tocar nada', !!d.querySelector('#p-simple').textContent.trim());
   check('y no queda encerrada en el detalle',
     !d.querySelector('#advanced').contains(d.querySelector('#p-simple')));
