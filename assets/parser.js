@@ -958,6 +958,7 @@
     'body-image':      { cat: 'contenido', pts: 15, sev: 'high', fuente: 'LR 29.3 (P 5.8% / H 0.0%), recortado al techo' },
     'subj-urgency':    { cat: 'contenido', pts: 14, sev: 'medium', fuente: 'LR 15.5 (P 5.7% / H 0.2%)' },
     'body-crypto':     { cat: 'contenido', pts: 10, sev: 'medium', fuente: 'LR 7.7 (P 13.9% / H 1.6%)' },
+    'body-callback':   { cat: 'contenido', pts: 6, sev: 'medium', fuente: 'LR 3.1 (P 0.6% / H 0.0%)' },
     'body-bec':        { cat: 'contenido', pts: 4, sev: 'medium', fuente: 'LR 2.2 (P 3.9% / H 1.6%)' },
     'body-hidden':     { cat: 'contenido', pts: 5, sev: 'low', fuente: 'LR 2.5 (P 37.5% / H 14.8%)' },
     'body-password':   { cat: 'contenido', pts: 12, sev: 'high', fuente: 'sin validar - preciso por construccion' },
@@ -1032,10 +1033,24 @@
   // Análisis principal
   // ---------------------------------------------------------------------------
 
+  const TELEFONO = /(?:\+\d{1,3}[\s.\-]?)?(?:\(?\d{3}\)?[\s.\-]?){2}\d{3,4}/;
+  const LLAMADA = /(llam[ae]|ll[áa]menos|call us|call now|contact us at|para cancelar|to cancel|customer (care|service|support)|atenci[óo]n al cliente|soporte t[ée]cnico|help ?desk)/i;
+  const COBRO = /(subscription|suscripci[óo]n|renewal|renovaci[óo]n|invoice|factura|order|pedido|charge|cargo|payment|pago|purchase|compra|receipt|recibo)/i;
+
   const URGENCY = /(urgente|inmediat|caduca|expira|vence|suspend|bloquea|bloqueo|último aviso|último aviso|accion requerida|acción requerida|24 horas|48 horas|impag|multa|sanción|sanción|premio|herencia|urgent|immediate|expires?|suspended|action required|final notice|overdue|last warning)/i;
 
   async function analyze(rawLatin1, meta) {
     meta = meta || {};
+    // Un .msg de Outlook es un contenedor OLE2, no un correo RFC 5322. Antes se
+    // parseaba como texto, no salia ninguna cabecera y devolvia BAJO: la
+    // respuesta mas tranquilizadora posible sobre un fichero que no se ha leido.
+    if (/^\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1/.test(rawLatin1)) {
+      const e = new Error('Esto es un .msg de Outlook, no un correo que pueda leer. ' +
+        'En Outlook: abre el correo, Archivo → Guardar como, y elige formato .eml. ' +
+        'O más fácil: busca "ver origen del mensaje", copia todo y pégalo aquí con Ctrl+V.');
+      e.formatoNoSoportado = 'msg';
+      throw e;
+    }
     const root = parseNode(rawLatin1, 0);
     const H = root.headers;
     const findings = [];
@@ -1262,6 +1277,14 @@
     }
     if (IBAN_RE.test(textoVisible) && pinta_bec) {
       push('body-iban', 'Da un número de cuenta (IBAN) dentro del correo para que hagas el ingreso ahí');
+    }
+    // Estafa del "llame para cancelar": una factura o renovacion que no has
+    // pedido y un telefono, sin enlaces ni adjuntos. Esta hecha justamente para
+    // no dejar nada que analizar, asi que si no se busca el telefono no queda
+    // ningun indicio.
+    if (urls.filter(u => u.tipo === 'enlace').length === 0 && TELEFONO.test(textoVisible) &&
+        LLAMADA.test(textoVisible) && COBRO.test(textoVisible + ' ' + subject)) {
+      push('body-callback', 'Te da un teléfono para cancelar un cobro que no has hecho, y ningún enlace: la estafa consiste en que llames');
     }
     if (/(no me llames|no llames|no puedo hablar|estoy en una reunion|estoy en una reunión|no digas nada|es confidencial)/i.test(textoVisible)) {
       push('body-nocontacto', 'Pide que no le llames ni lo comentes: sirve para que nadie verifique la petición');

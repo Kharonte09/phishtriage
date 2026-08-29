@@ -36,7 +36,8 @@
         batch.push({ name: f.name, report });
       } catch (e) {
         console.error(e);
-        alert('No se pudo analizar ' + f.name + ': ' + e.message);
+        // Los formatos que no sabemos leer se explican; el resto es un fallo
+        alert(e.formatoNoSoportado ? e.message : 'No se pudo analizar ' + f.name + ': ' + e.message);
       }
     }
     if (!batch.length) return;
@@ -139,6 +140,7 @@
     'body-image': 'Es casi todo una imagen, para que los filtros no puedan leerlo.',
     'body-bec': 'Pide cambiar datos del banco o hacer un pago.',
     'body-crypto': 'Habla de criptomonedas. Típico de estafas de inversión o de chantaje.',
+    'body-callback': 'Te da un teléfono para cancelar un cobro que tú no has hecho. Si llamas, te sacan los datos por voz.',
     'xmailer': 'Se ha mandado con una herramienta de envíos masivos, no desde un correo normal.',
     'url-mismatch': 'Un enlace enseña una dirección pero lleva a otra distinta.',
     'url-ip': 'Un enlace lleva a un número en vez de a una web con nombre.',

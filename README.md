@@ -70,64 +70,94 @@ frentes, no por acumular quince pegas del mismo tipo.
 
 | Categoría | Techo |
 |---|---|
-| Identidad del remitente | 23 |
-| Enlaces | 24 |
-| Adjuntos | 18 |
+| Autenticación (SPF/DKIM/DMARC) | 30 |
+| Identidad del remitente | 20 |
+| Enlaces | 20 |
 | Contenido del mensaje | 15 |
-| Autenticación (SPF/DKIM/DMARC) | 15 |
+| Adjuntos | 10 |
 | Transporte y cabeceras | 5 |
-| Combinaciones de fraude conocido | +20 |
+| Combinaciones de fraude conocido | +22 |
 
 BAJO menos de 20 · MEDIO 20-49 · ALTO 50-79 · CRÍTICO 80 o más.
 
 ### De dónde salen los números
 
-No están puestos a ojo. Cada peso sale de un motor antispam real cuyas
-puntuaciones están **ajustadas sobre corpus de correo bueno y malo**:
-
-- **[SpamAssassin](https://github.com/apache/spamassassin)**, `rules/50_scores.cf`.
-  Se usa la cuarta columna (red + bayes), que es la de producción. Su umbral de
-  spam por defecto es **5.0**.
-- **[Rspamd](https://github.com/rspamd/rspamd)**, `conf/scores.d/*.conf`.
-  Su umbral de rechazo por defecto es **15.0**.
-
-Para poder mezclar dos escalas distintas, cada peso se normaliza así:
+No están puestos a ojo, ni copiados de nadie: **salen de medir el motor contra correo
+real**. Para cada regla se cuenta cuántas veces dispara en phishing y cuántas en
+correo legítimo, y el cociente decide su peso:
 
 ```
-pts = redondeo( media( peso_fuente / umbral_fuente ) × 50 )
+LR  = P(la regla dispara | phishing) / P(la regla dispara | legítimo)
+pts = redondeo( 3,5 × log2(LR) )
 ```
 
-El ×50 mapea el "esto es spam" de cada motor sobre el 50 de PhishTriage, que es
-donde empieza ALTO, o sea "trátalo como una estafa".
+Una LR de 1 significa que el indicio no distingue nada, por grave que suene. Una de
+30 significa que aparece treinta veces más en el fraude que en el correo bueno.
 
-Cada regla lleva en el código un campo `fuente` con la cuenta a la vista, y sale
-también en la pestaña de Hallazgos. Las marcadas como `PT` no tienen equivalente
-en ningún motor: son aportación de esta herramienta, y son las únicas puestas a
-criterio propio. Hay un test que falla si alguien añade una regla sin declarar de
-dónde sale su peso.
+Corpus usados, 12.334 correos en total:
 
-### Dos cosas que cambiaron al hacer esto
+| Corpus | n | Época | Qué aporta |
+|---|---|---|---|
+| [Phishing Pot](https://github.com/rf-peixoto/phishing_pot) | 8.613 | 2023-25 | phishing real de honeypot |
+| [SpamAssassin `hard_ham`](https://spamassassin.apache.org/old/publiccorpus/) | 250 | 2002 | HTML comercial legítimo |
+| [Listas de Apache](https://lists.apache.org/) | 3.471 | 2025-26 | legítimo con autenticación moderna |
 
-**La autenticación pesa mucho menos de lo que parece.** SpamAssassin puntúa
-`SPF_FAIL` con **0.001 sobre 5.0**, prácticamente cero, porque el SPF falla
-constantemente en correo legítimo reenviado. El que manda es DMARC, que según el
-[RFC 7489](https://www.rfc-editor.org/rfc/rfc7489) *es la conclusión* de SPF y
-DKIM, no un tercer voto que se suma a los otros dos. Antes se sumaban los tres y
-un mismo hecho puntuaba tres veces: una lista de correo reenviada acumulaba 75
-puntos brutos por un solo fallo.
+Ninguno de los dos corpus legítimos vale por sí solo: el de 2002 tiene el HTML
+comercial pero es anterior a SPF/DKIM/DMARC, y el moderno autentica pero es texto
+plano. Para cada regla se toma **el peor caso legítimo de los dos**, para no
+acreditar a una regla que solo parece buena porque a un corpus le falta ese género
+de correo.
 
-**Hay pesos negativos.** Los dos motores los usan y son lo que evita que un
-boletín legítimo o una lista de correo acaben en MEDIO. Un DMARC que pasa resta,
-y una cadena [ARC](https://www.rfc-editor.org/rfc/rfc8617) válida resta más: es
-la firma del reenvío legítimo, que es la causa número uno de que el correo bueno
-falle DMARC.
+Cada regla lleva en el código un campo `fuente` con los porcentajes medidos, y sale
+también en la pestaña de Hallazgos. Las que dicen `sin validar` son las que el
+corpus no cubre; las que dicen `a mano` son las dos que hubo que poner a criterio
+porque la medida estaba contaminada. Hay un test que falla si alguien añade una
+regla sin declarar de dónde sale su peso.
 
-Con esto, cuatro correos legítimos que la primera versión suspendía bajaron a
-BAJO, y la separación entre el phishing de manual y un boletín normal pasó a ser
-de 100 a 0. Están todos en `tests/test.mjs` como casos de regresión.
+Se regenera con:
 
-Si aun así quieres que algo pese distinto, sigue siendo cambiar un número en
-`assets/parser.js` — pero ahora al lado hay que decir por qué.
+```bash
+node tools/verosimilitud.mjs <carpeta-phishing> <carpeta-legitimo>
+```
+
+### Qué dijo la medida
+
+**Detección: del 2,1% al 56,3%, con un 0,1% de falsos positivos.** La versión
+anterior anclaba los pesos a SpamAssassin y Rspamd, y eso estaba mal: esos motores
+llegan a su umbral sumando cientos de reglas más Bayes más listas negras de red.
+Este tiene sesenta reglas y ninguna consulta de red, así que importar sus pesos por
+regla sin importar su *cantidad* de reglas garantizaba no llegar nunca.
+
+**El 24% del phishing real pasa DMARC.** Se envía desde tenants de Microsoft 365
+comprometidos, así que autentica de verdad: lo falso es quien escribe, no el sobre.
+Los pesos negativos que premiaban al correo autenticado se activaban en el 60% del
+phishing, así que están en la mínima expresión.
+
+**Tres reglas de las que uno estaba orgulloso no distinguen nada:**
+
+| Regla | Phishing | Legítimo | LR |
+|---|---|---|---|
+| `url-mismatch` — el texto enseña una dirección y el enlace va a otra | 3,5% | 3,2% | 1,0 |
+| `dn-brand` — el nombre visible suplanta una marca | 9,8% | 11,1% | 0,9 |
+| `url-creds` — enlace a una página de identificarse | 6,7% | 53,2% | 0,1 |
+
+La primera duele, porque es el caso que encabeza este README. Tiene sentido: hoy
+casi todo el correo se lee en el móvil, donde no se ve la URL de destino, y el
+atacante ya no se molesta en disfrazarla.
+
+**Lo que sí distingue** es que el dominio no publique DMARC (44% vs 3%), que no
+publique SPF utilizable (29% vs 1%), los TLD baratos, los acortadores, las
+criptomonedas, la urgencia en el asunto, el correo que es casi solo una imagen, y
+sobre todo el `From` mal formado: una coma sin comillas en el nombre visible que
+parte la cabecera en dos, presente en el 18,6% del phishing y en cero de los 3.721
+correos legítimos.
+
+**Dos trampas en los datos**, por si alguien repite la medida. `compauth` daba una
+LR enorme, pero es una cabecera que solo escribe Microsoft, y el 98,5% del corpus de
+phishing lo recibió Microsoft frente al 8,1% del legítimo: medía el buzón de
+destino, no el fraude. Y el corpus legítimo moderno son listas de correo, que
+reescriben `Reply-To` y rompen el alineamiento por diseño.
+
 
 ## Qué NO hace
 
