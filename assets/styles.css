@@ -3,53 +3,22 @@
    terminal no ayuda a que se fie. */
 :root {
   color-scheme: light dark;
-
-  --bg: #f6f7f9;
-  --bg2: #ffffff;
-  --bg3: #eef1f5;
-  --line: #dde3ea;
-  --line2: #c8d2dd;
-  --fg: #16202b;
-  --dim: #5d6b7a;
-
-  --accent: #0f8a5f;
-  --accent-bg: #e6f6ef;
-  --accent2: #1668c4;
-  --high: #c02a3a;
-  --high-bg: #fdecee;
-  --med: #9a6100;
-  --med-bg: #fdf3e0;
-  --low: #1668c4;
-  --low-bg: #e9f1fb;
-  --info: #5d6b7a;
-  --info-bg: #eef1f5;
-
+  --bg: #f6f7f9; --bg2: #ffffff; --bg3: #eef1f5; --line: #dde3ea; --line2: #c8d2dd;
+  --fg: #16202b; --dim: #5d6b7a;
+  --accent: #0f8a5f; --accent-bg: #e6f6ef; --accent2: #1668c4;
+  --high: #c02a3a; --high-bg: #fdecee; --med: #9a6100; --med-bg: #fdf3e0;
+  --low: #1668c4; --low-bg: #e9f1fb; --info: #5d6b7a; --info-bg: #eef1f5;
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   --sombra: 0 1px 2px rgba(16, 32, 48, .06), 0 4px 12px rgba(16, 32, 48, .05);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0d1219;
-    --bg2: #141c26;
-    --bg3: #1b2531;
-    --line: #26323f;
-    --line2: #354454;
-    --fg: #e2eaf2;
-    --dim: #8fa1b3;
-
-    --accent: #3ddba7;
-    --accent-bg: #10291f;
-    --accent2: #61a9ff;
-    --high: #ff7080;
-    --high-bg: #2e151a;
-    --med: #ffbe5c;
-    --med-bg: #2c2110;
-    --low: #7fc9ff;
-    --low-bg: #12283a;
-    --info: #8fa1b3;
-    --info-bg: #1b2531;
-
+    --bg: #0d1219; --bg2: #141c26; --bg3: #1b2531; --line: #26323f; --line2: #354454;
+    --fg: #e2eaf2; --dim: #8fa1b3;
+    --accent: #3ddba7; --accent-bg: #10291f; --accent2: #61a9ff;
+    --high: #ff7080; --high-bg: #2e151a; --med: #ffbe5c; --med-bg: #2c2110;
+    --low: #7fc9ff; --low-bg: #12283a; --info: #8fa1b3; --info-bg: #1b2531;
     --sombra: none;
   }
 }

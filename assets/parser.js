@@ -168,17 +168,7 @@
   // ---------------------------------------------------------------------------
 
   // PSL reducida: sufijos de dos niveles mas habituales.
-  const MULTI_SUFFIX = new Set([
-    'co.uk', 'org.uk', 'me.uk', 'gov.uk', 'ac.uk', 'net.uk', 'sch.uk',
-    'com.es', 'org.es', 'gob.es', 'edu.es', 'nom.es',
-    'com.ar', 'com.br', 'com.mx', 'com.co', 'com.pe', 'com.cl', 'com.ve', 'com.uy',
-    'com.au', 'net.au', 'org.au', 'gov.au', 'edu.au',
-    'co.jp', 'or.jp', 'ne.jp', 'ac.jp', 'go.jp',
-    'co.kr', 'or.kr', 'co.in', 'net.in', 'org.in', 'gov.in',
-    'co.za', 'org.za', 'com.tr', 'gov.tr', 'com.cn', 'net.cn', 'org.cn', 'gov.cn',
-    'com.tw', 'com.hk', 'com.sg', 'com.my', 'co.nz', 'com.pt', 'com.pl', 'com.ua',
-    'com.ru', 'org.ru', 'net.ru', 'co.il', 'com.sa', 'com.eg', 'com.ng'
-  ]);
+  const MULTI_SUFFIX = new Set('co.uk org.uk me.uk gov.uk ac.uk net.uk sch.uk com.es org.es gob.es edu.es nom.es com.ar com.br com.mx com.co com.pe com.cl com.ve com.uy com.au net.au org.au gov.au edu.au co.jp or.jp ne.jp ac.jp go.jp co.kr or.kr co.in net.in org.in gov.in co.za org.za com.tr gov.tr com.cn net.cn org.cn gov.cn com.tw com.hk com.sg com.my co.nz com.pt com.pl com.ua com.ru org.ru net.ru co.il com.sa com.eg com.ng'.split(' '));
 
   function orgDomain(host) {
     if (!host) return '';
@@ -376,7 +366,15 @@
       disposition: cd.value || '', dispParams: cd.params, encoding: enc,
       body, children: [], depth
     };
-    if (depth > 12) return node;
+    // Hace falta un limite para no quedarse dando vueltas, pero pararse en
+    // silencio es peor que no mirar: con el limite en 12, un adjunto colgado por
+    // debajo desaparecia del informe y la nota caia a BAJO. Ahora el limite es
+    // 30 -el correo normal no pasa de 5- y ademas se marca, para que la nota lo
+    // tenga en cuenta en vez de callarselo.
+    if (depth > 30) {
+      if (node.mime.startsWith('multipart/') || node.mime === 'message/rfc822') node.truncado = true;
+      return node;
+    }
     if (node.mime.startsWith('multipart/') && ct.params.boundary) {
       const b = ct.params.boundary;
       const chunks = splitOnBoundary(body, b);
@@ -532,39 +530,26 @@
   // URLs
   // ---------------------------------------------------------------------------
 
-  const SHORTENERS = new Set(['bit.ly', 'tinyurl.com', 't.co', 'goo.gl', 'ow.ly', 'is.gd', 'buff.ly',
-    'cutt.ly', 'rb.gy', 'shorturl.at', 'rebrand.ly', 'tiny.cc', 'lnkd.in', 'bl.ink', 't.ly',
-    'shorte.st', 'adf.ly', 'v.gd', 'trib.al', 'mcaf.ee', 'urlz.fr', 'x.gd', 'clck.ru']);
+  const SHORTENERS = new Set('bit.ly tinyurl.com t.co goo.gl ow.ly is.gd buff.ly cutt.ly rb.gy shorturl.at rebrand.ly tiny.cc lnkd.in bl.ink t.ly shorte.st adf.ly v.gd trib.al mcaf.ee urlz.fr x.gd clck.ru'.split(' '));
 
   const REDIRECT_HOSTS = [/^clicktime\./i, /safelinks\.protection\.outlook\.com$/i, /urldefense\./i,
     /\.proofpoint\.com$/i, /\.mimecastprotect\.com$/i, /^r\./i, /^click\./i, /^link\./i, /^email\./i, /\.sendgrid\.net$/i];
 
   const CRED_WORDS = /(login|log-in|signin|sign-in|verify|verification|secure|account|update|confirm|password|passwd|credential|billing|invoice|payment|unlock|suspend|recover|auth|sso|mfa|otp|token|wallet|seed|kyc)/i;
 
-  const RISKY_TLD = new Set(['zip', 'mov', 'xyz', 'top', 'tk', 'ml', 'ga', 'cf', 'gq', 'work', 'click',
-    'link', 'country', 'stream', 'download', 'loan', 'review', 'kim', 'men', 'date', 'racing', 'win',
-    'bid', 'quest', 'cam', 'rest', 'buzz', 'monster', 'sbs', 'cfd', 'icu', 'shop', 'live', 'fit']);
+  const RISKY_TLD = new Set('zip mov xyz top tk ml ga cf gq work click link country stream download loan review kim men date racing win bid quest cam rest buzz monster sbs cfd icu shop live fit'.split(' '));
 
-  const BRANDS = ['microsoft', 'office365', 'outlook', 'onedrive', 'sharepoint', 'apple', 'icloud',
-    'google', 'gmail', 'amazon', 'aws', 'paypal', 'netflix', 'facebook', 'instagram', 'whatsapp',
-    'linkedin', 'dropbox', 'docusign', 'adobe', 'santander', 'bbva', 'caixabank', 'sabadell',
-    'bankinter', 'unicaja', 'ing', 'correos', 'seur', 'dhl', 'fedex', 'ups', 'dgt', 'aeat',
-    'agenciatributaria', 'seguridadsocial', 'endesa', 'iberdrola', 'movistar', 'vodafone',
-    'binance', 'coinbase', 'metamask', 'revolut', 'wetransfer', 'zoom', 'teams', 'chase', 'hsbc'];
+  const BRANDS = 'microsoft office365 outlook onedrive sharepoint apple icloud google gmail amazon aws paypal netflix facebook instagram whatsapp linkedin dropbox docusign adobe santander bbva caixabank sabadell bankinter unicaja ing correos seur dhl fedex ups dgt aeat agenciatributaria seguridadsocial endesa iberdrola movistar vodafone binance coinbase metamask revolut wetransfer zoom teams chase hsbc'.split(' ');
 
   // Correo gratuito: legítimo para una persona, sospechoso cuando quien escribe
   // dice ser el director financiero de una empresa.
-  const FREEMAIL = new Set(['gmail.com', 'googlemail.com', 'hotmail.com', 'hotmail.es',
-    'outlook.com', 'outlook.es', 'live.com', 'yahoo.com', 'yahoo.es', 'aol.com',
-    'protonmail.com', 'proton.me', 'gmx.com', 'mail.com', 'yandex.com', 'icloud.com']);
+  const FREEMAIL = new Set('gmail.com googlemail.com hotmail.com hotmail.es outlook.com outlook.es live.com yahoo.com yahoo.es aol.com protonmail.com proton.me gmx.com mail.com yandex.com icloud.com'.split(' '));
 
   const CARGOS = /\b(ceo|cfo|coo|cto|director|directora|direccion|dirección|gerente|presidente|presidenta|administrador|administradora|jefe|jefa|responsable|manager|head of)\b/i;
 
   // Servicios de archivos: el phishing desde cuentas comprometidas casi siempre
   // apunta aquí, porque el dominio es legítimo y ningún filtro lo bloquea.
-  const FILEHOSTS = new Set(['drive.google.com', 'docs.google.com', 'dropbox.com',
-    'wetransfer.com', 'we.tl', 'onedrive.live.com', '1drv.ms', 'mega.nz', 'mediafire.com',
-    'box.com', 'sharefile.com', 'sync.com', 'pcloud.com', 'terabox.com']);
+  const FILEHOSTS = new Set('drive.google.com docs.google.com dropbox.com wetransfer.com we.tl onedrive.live.com 1drv.ms mega.nz mediafire.com box.com sharefile.com sync.com pcloud.com terabox.com'.split(' '));
 
   const IBAN_RE = /\b[A-Z]{2}\d{2}[ ]?(?:[A-Za-z0-9]{4}[ ]?){3,7}[A-Za-z0-9]{1,4}\b/;
 
@@ -674,15 +659,14 @@
         }
       }
       // En casa del remitente, los indicios débiles no cuentan
-      const DEBILES = ['url-creds', 'url-brand', 'url-tld', 'url-subdomains', 'url-http',
-        'url-port', 'url-redirector', 'url-filehost'];
+      const DEBILES = 'url-creds url-brand url-tld url-subdomains url-http url-port url-redirector url-filehost'.split(' ');
       const enCasa = propios.has(od);
       const flagsFinales = enCasa ? flags.filter(f => DEBILES.indexOf(f.id) < 0) : flags;
 
       // Un enlace es donde el usuario puede pinchar. Una imagen o una fuente
       // que carga la plantilla no lo es, y mezclarlas hacía que un boletín
       // normal dijera "23 enlaces" cuando el usuario ve cuatro.
-      const PINCHABLES = ['html:a', 'html:form', 'html:refresh', 'text'];
+      const PINCHABLES = 'html:a html:form html:refresh text'.split(' ');
       const tipo = Array.from(entry.sources).some(x => PINCHABLES.indexOf(x) >= 0) ? 'enlace' : 'recurso';
 
       return {
@@ -713,13 +697,10 @@
   // Adjuntos
   // ---------------------------------------------------------------------------
 
-  const EXEC_EXT = new Set(['exe', 'scr', 'com', 'pif', 'cpl', 'msi', 'msp', 'mst', 'dll', 'sys',
-    'bat', 'cmd', 'ps1', 'psm1', 'vbs', 'vbe', 'js', 'jse', 'wsf', 'wsh', 'hta', 'jar', 'lnk',
-    'inf', 'reg', 'scf', 'application', 'gadget', 'msc', 'apk', 'appx', 'chm', 'url', 'library-ms',
-    'settingcontent-ms', 'diagcab', 'theme', 'iqy', 'slk', 'ade', 'adp', 'mde', 'accdb', 'py', 'sh']);
-  const MACRO_EXT = new Set(['docm', 'dotm', 'xlsm', 'xltm', 'xlam', 'pptm', 'potm', 'ppam', 'sldm', 'xll', 'xlsb']);
-  const CONTAINER_EXT = new Set(['zip', '7z', 'rar', 'iso', 'img', 'vhd', 'vhdx', 'cab', 'ace', 'arj', 'tar', 'gz', 'bz2', 'xz', 'z', 'lzh']);
-  const HTML_EXT = new Set(['html', 'htm', 'shtml', 'xhtml', 'mht', 'mhtml', 'svg']);
+  const EXEC_EXT = new Set('exe scr com pif cpl msi msp mst dll sys bat cmd ps1 psm1 vbs vbe js jse wsf wsh hta jar lnk inf reg scf application gadget msc apk appx chm url library-ms settingcontent-ms diagcab theme iqy slk ade adp mde accdb py sh'.split(' '));
+  const MACRO_EXT = new Set('docm dotm xlsm xltm xlam pptm potm ppam sldm xll xlsb'.split(' '));
+  const CONTAINER_EXT = new Set('zip 7z rar iso img vhd vhdx cab ace arj tar gz bz2 xz z lzh'.split(' '));
+  const HTML_EXT = new Set('html htm shtml xhtml mht mhtml svg'.split(' '));
 
   const MAGIC = [
     { sig: [0x4d, 0x5a], type: 'PE/DOS ejecutable (MZ)' },
@@ -915,6 +896,7 @@
     // Aparece en el 18,6% del phishing y en cero correos legitimos de 3.721.
     'from-malformed':  { cat: 'identidad', pts: 20, sev: 'high', fuente: 'LR 93.4 (P 18.6% / H 0.0%)' },
     'from-tld':        { cat: 'identidad', pts: 13, sev: 'high', fuente: 'LR 13.3 (P 3.0% / H 0.0%)' },
+    'dn-oficial-freemail': { cat: 'identidad', pts: 8, sev: 'high', fuente: 'LR 5.0 (P 0.4% / H <0.1%, regla de tres)' },
     'replyto-freemail':{ cat: 'identidad', pts: 6, sev: 'medium', fuente: 'LR 3.1 (P 0.6% / H 0.0%)' },
     'dn-mixed-script': { cat: 'identidad', pts: 5, sev: 'medium', fuente: 'LR 2.6 (P 0.5% / H 0.0%)' },
     'from-multi':      { cat: 'identidad', pts: 5, sev: 'medium', fuente: 'sin validar - varias direcciones reales en From' },
@@ -957,6 +939,7 @@
     // --- Contenido del mensaje (techo 15) -------------------------------------
     'body-image':      { cat: 'contenido', pts: 15, sev: 'high', fuente: 'LR 29.3 (P 5.8% / H 0.0%), recortado al techo' },
     'subj-urgency':    { cat: 'contenido', pts: 14, sev: 'medium', fuente: 'LR 15.5 (P 5.7% / H 0.2%)' },
+    'subj-premio':     { cat: 'contenido', pts: 12, sev: 'medium', fuente: 'LR 11.2 (P 4.4% / H 0.4%) - medido solo en ingles' },
     'body-crypto':     { cat: 'contenido', pts: 10, sev: 'medium', fuente: 'LR 7.7 (P 13.9% / H 1.6%)' },
     'body-callback':   { cat: 'contenido', pts: 6, sev: 'medium', fuente: 'LR 3.1 (P 0.6% / H 0.0%)' },
     'body-bec':        { cat: 'contenido', pts: 4, sev: 'medium', fuente: 'LR 2.2 (P 3.9% / H 1.6%)' },
@@ -984,6 +967,7 @@
     'att-rtlo':        { cat: 'adjuntos', pts: 9, sev: 'high', fuente: 'sin validar (0% en el corpus)' },
     'att-double':      { cat: 'adjuntos', pts: 8, sev: 'high', fuente: 'sin validar (0% en el corpus)' },
     'att-mismatch':    { cat: 'adjuntos', pts: 8, sev: 'high', fuente: 'sin validar (0% en el corpus)' },
+    'att-senuelo':     { cat: 'adjuntos', pts: 10, sev: 'high', fuente: 'LR 17.4 (P 1.4% / H <0.1%, regla de tres), recortado al techo' },
     'att-html':        { cat: 'adjuntos', pts: 6, sev: 'medium', fuente: 'LR 0.6 (P 0.1% / H 0.0%) - pocos datos' },
     'att-ole':         { cat: 'adjuntos', pts: 4, sev: 'medium', fuente: 'sin validar' },
     'att-container':   { cat: 'adjuntos', pts: 0, sev: 'info', fuente: 'LR 0.1 - no distingue' },
@@ -992,6 +976,7 @@
     // --- Transporte y cabeceras (techo 5) -------------------------------------
     'xmailer':         { cat: 'transporte', pts: 5, sev: 'medium', fuente: 'LR 17.4 (P 3.5% / H 0.0%), recortado por el techo' },
     'date-skew':       { cat: 'transporte', pts: 3, sev: 'low', fuente: 'LR 1.9 (P 1.2% / H 0.4%)' },
+    'mime-profundo':   { cat: 'adjuntos', pts: 8, sev: 'high', fuente: 'sin validar (0% en los tres corpus) - evasion por construccion' },
     'rcv-none':        { cat: 'transporte', pts: 3, sev: 'low', fuente: 'sin validar' },
     'date-missing':    { cat: 'transporte', pts: 2, sev: 'low', fuente: 'sin validar' },
     'rcv-delay':       { cat: 'transporte', pts: 0, sev: 'info', fuente: 'LR 0.1 (P 3.4% / H 22.8%) - no distingue' },
@@ -1039,6 +1024,19 @@
 
   const URGENCY = /(urgente|inmediat|caduca|expira|vence|suspend|bloquea|bloqueo|último aviso|último aviso|accion requerida|acción requerida|24 horas|48 horas|impag|multa|sanción|sanción|premio|herencia|urgent|immediate|expires?|suspended|action required|final notice|overdue|last warning)/i;
 
+  // Premio, sorteo o bono que nadie ha pedido. El peso sale de medir SOLO los
+  // terminos ingleses, que son los unicos que los dos corpus legitimos -ambos
+  // en ingles- pueden desmentir: LR 11,2 ahi. Los demas idiomas amplian la
+  // cobertura pero no la confianza, asi que van con ese mismo peso y no con el
+  // que saldria de contarlos (que seria medir el idioma, no el fraude).
+  const PREMIO = /(has? ganado|ha sido premiad|premio|loter[ií]a|sorteo|has? sido seleccionad|you (have )?won|you'?re a winner|winner|jackpot|free spins?|freispiele|cashback|airdrop|gewonnen|gewinn|vinto|vincita|claim your (prize|bonus|reward)|reclama tu|congratulations[!,. ]|felicidades|prize|lottery|sweepstakes?|bonus (von|sichern))/i;
+
+  // Nombre visible que habla como un departamento y no como una persona. Solo
+  // cuenta junto a un buzon gratuito: un banco no notifica desde Gmail. Suelto
+  // no vale, porque el 0% legitimo que mide es que ningun corpus legitimo trae
+  // correo en español ni en portugues.
+  const OFICIAL = /(notifica|aviso|atendimento|comunicado|no-?reply|nao-?responda|helpdesk|suporte|soporte|departamento|ouvidoria|cobran[cç]a|seguran[cç]a|protocolo|setor|central de|fatura|boleto|intima[cç])/i;
+
   async function analyze(rawLatin1, meta) {
     meta = meta || {};
     // Un .msg de Outlook es un contenedor OLE2, no un correo RFC 5322. Antes se
@@ -1051,8 +1049,40 @@
       e.formatoNoSoportado = 'msg';
       throw e;
     }
+    // El mismo motivo vale para todo lo demas que no sea un correo. Un PDF, un
+    // ZIP, una foto o el cuerpo pegado sin cabeceras se parseaban como texto, no
+    // salia ninguna cabecera y devolvia BAJO: verde tranquilizador sobre un
+    // fichero que no se ha leido. Antes de puntuar nada hay que saber que esto
+    // es un correo.
+    const OTROS_FORMATOS = [
+      [/^%PDF-/, 'un PDF'], [/^PK\x03\x04/, 'un ZIP (o un .docx/.xlsx, que son ZIP por dentro)'],
+      [/^\x89PNG\r\n/, 'una imagen PNG'], [/^\xff\xd8\xff/, 'una imagen JPEG'],
+      [/^GIF8[79]a/, 'una imagen GIF'], [/^\{\\rtf/, 'un documento RTF'],
+      [/^MZ/, 'un ejecutable de Windows'], [/^\x1f\x8b/, 'un fichero comprimido gzip']
+    ];
+    for (const [magia, queEs] of OTROS_FORMATOS) {
+      if (magia.test(rawLatin1)) {
+        const e = new Error('Esto es ' + queEs + ', no un correo. Necesito el correo entero, ' +
+          'con sus cabeceras: guárdalo como .eml, o abre "ver origen del mensaje", ' +
+          'copia todo y pégalo aquí con Ctrl+V.');
+        e.formatoNoSoportado = 'otro';
+        throw e;
+      }
+    }
+
     const root = parseNode(rawLatin1, 0);
     const H = root.headers;
+    // Sin ninguna de estas cabeceras no hay correo que analizar. Da igual que el
+    // fichero tenga texto: puntuarlo seria inventarse un veredicto.
+    if (!['from', 'received', 'subject', 'to', 'date', 'message-id'].some(h => headerGet(H, h))) {
+      const e = new Error(rawLatin1.trim()
+        ? 'Esto no parece un correo: no tiene ninguna cabecera (From, Subject, Received...). ' +
+          'Si has pegado solo el texto del mensaje, necesito además la parte de arriba: ' +
+          'busca "ver original" o "ver origen del mensaje" y copia todo.'
+        : 'El fichero está vacío.');
+      e.formatoNoSoportado = 'sin-cabeceras';
+      throw e;
+    }
     const findings = [];
     const push = (id, msg) => {
       const p = PESOS[id] || { cat: 'contenido', pts: 0, sev: 'info' };
@@ -1183,6 +1213,10 @@
       if (brand && fromOrg && !fromOrg.replace(/[^a-z0-9]/g, '').includes(brand)) {
         push('dn-brand', 'Nombre visible suplanta a "' + brand + '" desde el dominio ' + fromOrg);
       }
+      if (dn && FREEMAIL.has(fromOrg) && (brand || OFICIAL.test(dn))) {
+        push('dn-oficial-freemail', 'Firma como un departamento o una marca ("' + dn.slice(0, 40) +
+          '") pero escribe desde un buzón gratuito: ' + fromOrg);
+      }
       const mezcla = scriptMixto(dn) || scriptMixto(from[0].address || '');
       if (mezcla) {
         push('dn-mixed-script', 'Mezcla de alfabetos dentro de una misma palabra ("' + mezcla + '"): letras de otro alfabeto que se ven igual que las latinas');
@@ -1288,6 +1322,22 @@
     }
     if (/(no me llames|no llames|no puedo hablar|estoy en una reunion|estoy en una reunión|no digas nada|es confidencial)/i.test(textoVisible)) {
       push('body-nocontacto', 'Pide que no le llames ni lo comentes: sirve para que nadie verifique la petición');
+    }
+    // Las tres siguientes miran lo que dice el correo, no el sobre. Son las
+    // unicas que le llegan al fraude que autentica bien porque se manda desde
+    // una cuenta de verdad, robada o gratuita: ahi SPF, DKIM y DMARC pasan y no
+    // queda nada mas que leer.
+    if (PREMIO.test(subject)) {
+      push('subj-premio', 'El asunto anuncia un premio, un sorteo o un bono que no has pedido');
+    }
+    if (urls.filter(u => u.tipo === 'enlace').length === 0 && attachments.length && textoVisible.length < 400) {
+      push('att-senuelo', 'Cuatro líneas y un adjunto, sin un solo enlace: todo el mensaje está en el fichero para que lo abras');
+    }
+    // Ningun correo legitimo mete catorce sobres uno dentro de otro. Cuando pasa
+    // es para que el analisis se pare antes de llegar al fondo.
+    const truncado = (function hay(n) { return !!n.truncado || n.children.some(hay); })(root);
+    if (truncado) {
+      push('mime-profundo', 'El mensaje anida partes tan hondo que he dejado de abrirlas: puede haber algo escondido ahí debajo');
     }
 
     // --- Puntos de URLs y adjuntos

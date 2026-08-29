@@ -304,6 +304,42 @@ console.log('\n== robustez ==');
 const roto = await analizar('From: a@b.com\r\nSubject: x\r\nContent-Type: text/html\r\n\r\n<p>&#x110000;</p>\r\n', 'roto.eml');
 check('una entidad HTML fuera de rango no tumba el analisis', roto.verdict === 'BAJO');
 
+// Lo peor que puede hacer esto es contestar BAJO -verde, tranquilizador- sobre
+// un fichero que no ha sabido leer. Cualquier cosa que no sea un correo tiene
+// que decirlo, no puntuarla.
+const noSonCorreos = {
+  'un PDF': '%PDF-1.7\n1 0 obj<</Type/Catalog>>endobj',
+  'un ZIP o un .docx': 'PK\x03\x04\x14\x00\x00\x00\x08\x00basura',
+  'una imagen PNG': '\x89PNG\r\n\x1a\n\x00\x00\x00\x00',
+  'un .msg de Outlook': '\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1basura',
+  'un fichero vacio': '',
+  'solo el cuerpo, sin cabeceras': 'Hola Juan, te confirmo la reunion del martes.'
+};
+for (const [queEs, contenido] of Object.entries(noSonCorreos)) {
+  let aviso = null;
+  try { await PT.analyze(contenido, { filename: 'x' }); }
+  catch (e) { aviso = e.formatoNoSoportado; }
+  check('no da un veredicto sobre ' + queEs + ': avisa', !!aviso, aviso || 'devolvio una nota');
+}
+
+// Un adjunto colgado muy hondo tiene que seguir viendose: si el analisis se
+// para antes de llegar, el .exe desaparece y la nota baja a BAJO.
+const hondo = (prof) => {
+  let c = 'Content-Type: application/x-msdownload; name="factura.exe"\r\n' +
+    'Content-Disposition: attachment; filename="factura.exe"\r\n\r\nMZ...\r\n';
+  for (let i = prof; i > 0; i--) {
+    c = 'Content-Type: multipart/mixed; boundary=b' + i + '\r\n\r\n--b' + i + '\r\n' + c + '--b' + i + '--\r\n';
+  }
+  return 'From: a@b.com\r\nSubject: factura\r\n' + c;
+};
+const anidado = await analizar(hondo(20), 'anidado.eml');
+check('un adjunto anidado 20 niveles no se pierde', anidado.attachments.length === 1,
+  anidado.attachments.length + ' adjuntos');
+const anidadisimo = await analizar(hondo(40), 'anidadisimo.eml');
+check('y si aun asi hay que parar, se dice en vez de callarlo',
+  anidadisimo.findings.some(f => f.id === 'mime-profundo'),
+  anidadisimo.findings.map(f => f.id).join(' '));
+
 console.log('\n== los pesos vienen de algun sitio ==');
 const conFuente = (() => {
   const src = fs.readFileSync(path.join(ROOT, 'assets/parser.js'), 'utf8');
