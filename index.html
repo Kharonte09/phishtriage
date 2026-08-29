@@ -21,12 +21,6 @@
 
 <main class="wrap">
 
-  <ol class="pasos">
-    <li><b>1</b><span>Descarga el correo, o c&oacute;pialo entero.</span></li>
-    <li><b>2</b><span>Su&eacute;ltalo aqu&iacute; abajo, o p&eacute;galo con <b>Ctrl+V</b>.</span></li>
-    <li><b>3</b><span>Te digo si te puedes fiar y qu&eacute; hacer.</span></li>
-  </ol>
-
   <div id="drop">
     <h2>Arrastra aqu&iacute; el correo</h2>
     <p>O haz clic para buscarlo en tu ordenador.</p>
@@ -38,19 +32,17 @@
     <button id="btnReset" disabled>Analizar otro correo</button>
   </div>
 
-  <details class="ayuda" style="margin-top:16px">
-    <summary>&iquest;C&oacute;mo descargo el correo?</summary>
-    <p class="small">Necesitas el fichero del correo, no una captura de pantalla. Segu&uacute;n lo que uses:</p>
-    <table>
+  <details class="card" style="margin-top:14px">
+    <summary style="cursor:pointer">&iquest;C&oacute;mo descargo el correo?</summary>
+    <table style="margin-top:10px">
       <tr><td class="k">Gmail</td><td class="v">Abre el correo &rarr; men&uacute; <b>&#8942;</b> &rarr; <b>Descargar mensaje</b>.</td></tr>
       <tr><td class="k">Outlook (programa)</td><td class="v">Arrastra el correo desde la lista hasta el escritorio.</td></tr>
       <tr><td class="k">Outlook (web)</td><td class="v">Abre el correo en otra ventana &rarr; <b>&#8942;</b> &rarr; <b>Guardar como</b>.</td></tr>
       <tr><td class="k">Apple Mail</td><td class="v">Arrastra el correo a una carpeta.</td></tr>
       <tr><td class="k">Thunderbird</td><td class="v">Clic derecho &rarr; <b>Guardar como &rarr; Archivo</b>.</td></tr>
+      <tr><td class="k">Si no te aclaras</td><td class="v">Busca <b>mensaje original</b> o
+        <b>ver c&oacute;digo fuente</b>, selecciona todo, c&oacute;pialo y p&eacute;galo aqu&iacute; con <b>Ctrl+V</b>.</td></tr>
     </table>
-    <p class="small" style="margin-bottom:0">Si no lo encuentras, hay un atajo que funciona en todos: busca la opci&oacute;n
-      <b>mensaje original</b> o <b>ver c&oacute;digo fuente</b>, selecciona todo el texto que salga,
-      c&oacute;pialo y p&eacute;galo aqu&iacute; con <b>Ctrl+V</b>.</p>
   </details>
 
   <div id="result" hidden>

@@ -98,18 +98,6 @@ button, .btn {
 button:hover, .btn:hover { border-color: var(--accent2); }
 button:disabled { opacity: .45; cursor: not-allowed; }
 
-/* Los tres pasos --------------------------------------------------------- */
-.pasos { display: flex; gap: 10px; flex-wrap: wrap; margin: 0 0 16px; padding: 0; list-style: none; }
-.pasos li {
-  flex: 1; min-width: 190px; display: flex; gap: 10px; align-items: flex-start;
-  font-size: 14px; color: var(--dim);
-}
-.pasos b {
-  flex: none; width: 23px; height: 23px; border-radius: 50%;
-  background: var(--bg3); color: var(--fg); border: 1px solid var(--line2);
-  display: grid; place-items: center; font-size: 12.5px; font-weight: 700;
-}
-
 /* Zona donde se suelta el correo ----------------------------------------- */
 #drop {
   border: 2px dashed var(--line2); border-radius: 16px; padding: 46px 24px;
@@ -276,10 +264,6 @@ pre.block {
 }
 .pill.bad { color: var(--high); border-color: var(--high); background: var(--high-bg); }
 .pill.good { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
-
-details.ayuda { border: 1px solid var(--line); border-radius: 12px; background: var(--bg2); padding: 14px 18px; }
-details.ayuda summary { cursor: pointer; font-weight: 600; font-size: 15px; }
-details.ayuda[open] summary { margin-bottom: 6px; }
 
 footer { border-top: 1px solid var(--line); margin-top: 44px; padding: 20px 0; color: var(--dim); font-size: 13px; }
 
