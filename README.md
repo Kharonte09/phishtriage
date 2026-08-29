@@ -33,7 +33,7 @@ no se cargan imágenes remotas ni se le avisa al atacante de que lo has abierto.
 2. Suéltalo en la página, o pégalo con `Ctrl+V`.
 3. Lee la pestaña **¿Qué hago?**.
 
-### Cómo sacar el fichero del correo
+### Cómo descargo el correo
 
 | Programa | Cómo |
 |---|---|
@@ -70,18 +70,64 @@ frentes, no por acumular quince pegas del mismo tipo.
 
 | Categoría | Techo |
 |---|---|
-| Autenticación (SPF/DKIM/DMARC) | 30 |
-| Identidad del remitente | 20 |
-| Enlaces | 20 |
-| Adjuntos | 15 |
-| Contenido del mensaje | 10 |
+| Identidad del remitente | 23 |
+| Enlaces | 24 |
+| Adjuntos | 18 |
+| Contenido del mensaje | 15 |
+| Autenticación (SPF/DKIM/DMARC) | 15 |
 | Transporte y cabeceras | 5 |
 | Combinaciones de fraude conocido | +20 |
 
 BAJO menos de 20 · MEDIO 20-49 · ALTO 50-79 · CRÍTICO 80 o más.
 
-La ponderación está en dos tablas al principio de `assets/parser.js`. Si algo
-debería pesar más o menos, se cambia un número y ya.
+### De dónde salen los números
+
+No están puestos a ojo. Cada peso sale de un motor antispam real cuyas
+puntuaciones están **ajustadas sobre corpus de correo bueno y malo**:
+
+- **[SpamAssassin](https://github.com/apache/spamassassin)**, `rules/50_scores.cf`.
+  Se usa la cuarta columna (red + bayes), que es la de producción. Su umbral de
+  spam por defecto es **5.0**.
+- **[Rspamd](https://github.com/rspamd/rspamd)**, `conf/scores.d/*.conf`.
+  Su umbral de rechazo por defecto es **15.0**.
+
+Para poder mezclar dos escalas distintas, cada peso se normaliza así:
+
+```
+pts = redondeo( media( peso_fuente / umbral_fuente ) × 50 )
+```
+
+El ×50 mapea el "esto es spam" de cada motor sobre el 50 de PhishTriage, que es
+donde empieza ALTO, o sea "trátalo como una estafa".
+
+Cada regla lleva en el código un campo `fuente` con la cuenta a la vista, y sale
+también en la pestaña de Hallazgos. Las marcadas como `PT` no tienen equivalente
+en ningún motor: son aportación de esta herramienta, y son las únicas puestas a
+criterio propio. Hay un test que falla si alguien añade una regla sin declarar de
+dónde sale su peso.
+
+### Dos cosas que cambiaron al hacer esto
+
+**La autenticación pesa mucho menos de lo que parece.** SpamAssassin puntúa
+`SPF_FAIL` con **0.001 sobre 5.0**, prácticamente cero, porque el SPF falla
+constantemente en correo legítimo reenviado. El que manda es DMARC, que según el
+[RFC 7489](https://www.rfc-editor.org/rfc/rfc7489) *es la conclusión* de SPF y
+DKIM, no un tercer voto que se suma a los otros dos. Antes se sumaban los tres y
+un mismo hecho puntuaba tres veces: una lista de correo reenviada acumulaba 75
+puntos brutos por un solo fallo.
+
+**Hay pesos negativos.** Los dos motores los usan y son lo que evita que un
+boletín legítimo o una lista de correo acaben en MEDIO. Un DMARC que pasa resta,
+y una cadena [ARC](https://www.rfc-editor.org/rfc/rfc8617) válida resta más: es
+la firma del reenvío legítimo, que es la causa número uno de que el correo bueno
+falle DMARC.
+
+Con esto, cuatro correos legítimos que la primera versión suspendía bajaron a
+BAJO, y la separación entre el phishing de manual y un boletín normal pasó a ser
+de 100 a 0. Están todos en `tests/test.mjs` como casos de regresión.
+
+Si aun así quieres que algo pese distinto, sigue siendo cambiar un número en
+`assets/parser.js` — pero ahora al lado hay que decir por qué.
 
 ## Qué NO hace
 
@@ -110,11 +156,13 @@ Guardia Civil.
 
 Cuatro ficheros y ninguna dependencia:
 
-index.html la página
-assets/parser.js el motor: MIME, cabeceras, autenticación, URLs, hashes, ponderación
-assets/ui.js la interfaz: convierte el análisis en algo legible
-assets/styles.css los estilos
-tests/test.mjs las pruebas
+| Fichero | Qué hace |
+|---|---|
+| `index.html` | la página |
+| `assets/parser.js` | el motor: MIME, cabeceras, autenticación, URLs, hashes, ponderación |
+| `assets/ui.js` | la interfaz: convierte el análisis en algo legible |
+| `assets/styles.css` | los estilos, en claro y oscuro según el sistema |
+| `tests/test.mjs` | las pruebas |
 
 
 

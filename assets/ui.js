@@ -6,14 +6,11 @@
   const $ = s => document.querySelector(s);
   const $$ = s => Array.from(document.querySelectorAll(s));
 
-  let current = null;      // informe activo
   let batch = [];          // [{name, report}]
 
   // --- helpers -------------------------------------------------------------
   const esc = s => String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
-  function el(html) { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild; }
 
   async function copy(text, btn) {
     try { await navigator.clipboard.writeText(text); }
@@ -58,7 +55,7 @@
         '<td class="v-' + b.report.verdict + '">' + b.report.verdict + '</td>' +
         '<td class="mono">' + b.report.score + '</td>' +
         '<td class="mono">' + esc(b.report.summary.from || '-') + '</td>' +
-        '<td class="mono">' + b.report.urls.length + '</td>' +
+        '<td class="mono">' + b.report.summary.urlCount + '</td>' +
         '<td class="mono">' + b.report.attachments.length + '</td></tr>').join('') +
       '</tbody></table></div>';
     box.querySelectorAll('tr[data-i]').forEach(tr => tr.onclick = () => show(batch[+tr.dataset.i].report));
@@ -66,30 +63,25 @@
 
   // --- render principal ----------------------------------------------------
   function show(r) {
-    current = r;
     $('#result').hidden = false;
     ['#btnReset'].forEach(s => $(s).disabled = false);
 
-    // veredicto
+    // El veredicto es lo primero que se lee, y va en cristiano. El numero y la
+    // etiqueta tecnica quedan debajo, en pequeño, para quien los quiera.
+    const [titulo, lede] = TITULARES[r.verdict];
+    $('#verdictBox').className = 'verdict r-' + r.verdict;
     const ring = $('#ring'), svg = $('.score-ring');
     const circ = 2 * Math.PI * 17;
     ring.setAttribute('stroke-dasharray', (circ * r.score / 100).toFixed(1) + ' ' + circ.toFixed(1));
     $('#ringTxt').textContent = r.score;
     svg.style.color = r.score >= 50 ? 'var(--high)' : r.score >= 20 ? 'var(--med)' : 'var(--accent)';
     const t = $('#verdictTitle');
-    t.textContent = 'Riesgo ' + r.verdict + ' - ' + r.score + '/100';
+    t.textContent = titulo;
     t.className = 'v-' + r.verdict;
-    $('#verdictSub').innerHTML = '<b>' + esc(r.summary.subject || '(sin asunto)') + '</b><br>' +
-      esc(r.summary.fromDisplay || '') + ' &lt;' + esc(r.summary.from || '?') + '&gt;' +
-      (r.meta.filename ? ' <span class="muted">- ' + esc(r.meta.filename) + '</span>' : '');
-
-    const cls = v => !v ? '' : /^pass$/i.test(v) ? 'pass' : /^(fail|softfail)$/i.test(v) ? 'fail' : 'warn';
-    $('#authChips').innerHTML =
-      ['spf', 'dkim', 'dmarc'].map(k =>
-        '<span class="chip ' + cls(r.auth[k]) + '">' + k.toUpperCase() + ' <b>' + (r.auth[k] || 'n/d') + '</b></span>').join('') +
-      '<span class="chip">saltos <b>' + r.received.length + '</b></span>' +
-      '<span class="chip">enlaces <b>' + r.summary.urlCount + '</b></span>' +
-      '<span class="chip">adj <b>' + r.attachments.length + '</b></span>';
+    $('#verdictLede').textContent = lede;
+    $('#verdictNota').textContent = 'Riesgo ' + (VERDICTO_ES[r.verdict] || r.verdict) +
+      ' · ' + r.score + ' de 100' + (r.meta.filename ? ' · ' + r.meta.filename : '');
+    renderSobre(r);
 
     $('#nFind').textContent = r.findings.length;
     $('#nHead').textContent = r.headers.length;
@@ -159,32 +151,63 @@
     'att-html': 'Trae una página web como archivo. Truco habitual para robar contraseñas.',
     'att-double': 'Un archivo tiene doble extensión para parecer un PDF o una foto.',
     'att-mismatch': 'Un archivo dice ser una cosa y por dentro es otra.',
-    'att-rtlo': 'El nombre de un archivo usa un truco para verse del revés.'
+    'att-rtlo': 'El nombre de un archivo usa un truco para verse del revés.',
+    'dn-mixed-script': 'El nombre de quien escribe mezcla letras de otro alfabeto que se ven igual que las nuestras.',
+    'dmarc-none': 'El dominio desde el que escriben no ha configurado la protección que evita que le suplanten.',
+    'spf-softfail': 'El servidor que lo ha enviado no es del todo el que debería.',
+    'spf-neutral': 'El dominio desde el que escriben no dice quién puede enviar en su nombre.',
+    'compauth': 'Los filtros de Microsoft no han podido confirmar que sea auténtico.',
+    'align-dkim': 'La firma del correo es de otra empresa distinta de la que dice enviarlo.',
+    'from-multi': 'El correo lleva varios remitentes a la vez. Es una forma de despistar a los filtros.',
+    'from-missing': 'El correo no dice quién lo envía.',
+    'mid-missing': 'Le falta la marca que ponen los programas de correo normales.',
+    'mid-mismatch': 'La marca interna del correo no cuadra con quien dice enviarlo.',
+    'url-zerowidth': 'Un enlace lleva letras invisibles metidas dentro para disimular a dónde va.',
+    'url-rtlo': 'Un enlace usa un truco para que la dirección se lea al revés de como es.',
+    'url-data': 'Un enlace lleva una página entera metida dentro del propio correo.',
+    'url-multi-at': 'Un enlace enseña una dirección conocida al principio, pero el destino real es otro.',
+    'url-subdomains': 'Un enlace encadena tantos nombres que el de verdad queda escondido al final.',
+    'url-no-tld': 'Un enlace no lleva a una web normal, sino a un nombre suelto.',
+    'url-port': 'Un enlace entra por una puerta rara del servidor, no por la habitual.',
+    'att-archive-nested': 'Trae un comprimido con otro dentro. Se hace para que el antivirus no pueda mirar.',
+    'att-encrypted': 'Trae un archivo con contraseña. Así ningún antivirus puede ver lo que lleva.',
+    'att-ole': 'Un archivo tiene por dentro un formato antiguo de Office que no le corresponde.',
+    'att-container': 'Trae un archivo comprimido, y ahí dentro puede ir cualquier cosa.',
+    'body-iframe': 'Lleva una ventana a otra web incrustada dentro.',
+    'body-empty': 'No dice nada: solo trae el archivo adjunto.',
+    'body-entities': 'El texto está escrito de forma rara a propósito, para colarse en los filtros.',
+    'rcv-none': 'No se ve por dónde ha pasado. O lo han metido a mano o le han borrado el rastro.',
+    'date-missing': 'El correo no lleva fecha.',
+    'date-skew': 'La fecha que dice el correo no cuadra con la de los servidores por los que pasó.',
+    'rcv-delay': 'Se quedó parado horas en uno de los servidores por los que pasó.'
   };
 
   const CONSEJOS = {
     CRITICO: ['No pulses ningún enlace ni abras los archivos que trae.',
-      'No respondas, y no llames a los teléfonos que aparezcan.',
-      'Si ya has puesto tu contraseña en algún sitio, cámbiala ya. Entra tú a la web oficial escribiendo la dirección a mano.',
-      'Si dice ser tu banco, llama al número que hay detrás de tu tarjeta. Nunca al del correo.',
-      'Bórralo.'],
+      'No respondas, y no llames a los teléfonos que aparezcan en el correo.',
+      'Si ya has escrito tu contraseña en algún sitio, cámbiala ahora. Abre tú la web oficial escribiendo la dirección a mano, no desde aquí.',
+      'Si dice ser tu banco, llama al número que hay detrás de tu tarjeta. Nunca al que venga en el correo.',
+      'Cuando hayas hecho lo anterior, bórralo.'],
     ALTO: ['No pulses ningún enlace ni abras los archivos que trae.',
-      'No respondas.',
-      'Compruébalo por otro lado: entra tú a la web oficial escribiendo la dirección a mano, o llama al teléfono de siempre.'],
-    MEDIO: ['De momento, no pulses enlaces ni abras archivos.',
-      'Pregunta por otro medio a quien te lo manda si te ha escrito de verdad.',
-      'Si te pide dinero, datos o una contraseña, da por hecho que es estafa hasta que lo confirmes.'],
-    BAJO: ['No he visto señales claras de estafa, pero esto no es una garantía.',
-      'Si te pide dinero, contraseñas o datos personales, compruébalo igual por otro lado.',
-      'Ante la duda, no pulses el enlace: entra tú a la web escribiendo la dirección a mano.']
+      'No respondas ni llames a los teléfonos que aparezcan.',
+      'Compruébalo por otro camino: abre tú la web oficial escribiendo la dirección a mano, o llama al teléfono de siempre.'],
+    MEDIO: ['De momento no pulses enlaces ni abras archivos.',
+      'Pregunta a quien dice enviarlo, pero por otro medio: llámale o escríbele a la dirección que ya tenías.',
+      'Si te pide dinero, datos o una contraseña, dalo por estafa hasta que alguien te confirme lo contrario.'],
+    BAJO: ['No he visto señales claras de estafa, pero esto no es un certificado.',
+      'Si te pide dinero, contraseñas o datos personales, compruébalo igual por otro camino.',
+      'Ante la duda, no pulses el enlace: abre tú la web escribiendo la dirección a mano.']
   };
 
   const TITULARES = {
     CRITICO: ['Casi seguro que es una estafa', 'No toques nada de este correo.'],
     ALTO: ['Trátalo como una estafa', 'Tiene varias señales claras de engaño.'],
     MEDIO: ['Desconfía de este correo', 'Hay cosas que no cuadran.'],
-    BAJO: ['No he visto señales de estafa', 'Aun así, comprueba antes de fiarte.']
+    BAJO: ['No he visto señales de estafa', 'Aun así, comprueba antes de fiarte de lo que te pida.']
   };
+
+  // La etiqueta tecnica, escrita como se escribe en castellano
+  const VERDICTO_ES = { CRITICO: 'CRÍTICO', ALTO: 'ALTO', MEDIO: 'MEDIO', BAJO: 'BAJO' };
 
   const vtSearch = q => 'https://www.virustotal.com/gui/search/' + encodeURIComponent(q);
   const vtFile = h => 'https://www.virustotal.com/gui/file/' + encodeURIComponent(h);
@@ -209,45 +232,44 @@
     return esc(cortada) + '@<b>' + esc(dominio) + '</b>';
   }
 
+  // Quien escribe y con que asunto. Antes estaba mezclado con los motivos, y
+  // lo primero que quiere ver alguien es de quien viene el correo.
+  function renderSobre(r) {
+    const relay = RELAYS[r.summary.fromOrgDomain];
+    $('#sobre').innerHTML =
+      '<div><span class="et">Dice ser</span>' +
+      (r.summary.fromDisplay ? '<b>' + esc(r.summary.fromDisplay) + '</b>'
+                             : '<span class="muted">no pone ningún nombre</span>') + '</div>' +
+      '<div><span class="et">Escribe desde</span><code>' + direccionCorta(r.summary.from) + '</code></div>' +
+      (relay ? '<div class="small" style="margin-left:108px">Es ' + relay + ': la dirección de verdad está oculta.</div>' : '') +
+      '<div><span class="et">Asunto</span>' + esc(r.summary.subject || '(sin asunto)') + '</div>';
+  }
+
   function renderSimple(r) {
-    const [titulo, sub] = TITULARES[r.verdict];
     const vistos = [];
-    for (const f of r.findings) {
+    for (const f of r.findings.slice().sort((a, b) => (b.points || 0) - (a.points || 0))) {
+      if (!(f.points > 0)) continue;   // los mitigantes no son motivos de sospecha
       const txt = EN_CRISTIANO[f.id];
       if (txt && vistos.indexOf(txt) < 0) vistos.push(txt);
     }
     const razones = vistos.slice(0, 5);
-
-    const relay = RELAYS[r.summary.fromOrgDomain];
-    const quien = '<code>' + direccionCorta(r.summary.from) + '</code>' +
-      (relay ? '<div class="small">Es ' + relay + ': la dirección de verdad está oculta.</div>' : '');
+    const calma = r.verdict === 'BAJO';
 
     $('#p-simple').innerHTML =
-      '<div class="card">' +
-      '<h2 class="v-' + r.verdict + '" style="margin:0 0 4px;font-size:22px">' + esc(titulo) + '</h2>' +
-      '<p class="muted" style="margin:0 0 12px">' + esc(sub) + '</p>' +
-      '<table><tr><td class="k">Dice ser</td><td class="v">' +
-      (r.summary.fromDisplay ? '<b>' + esc(r.summary.fromDisplay) + '</b>' : '<span class="muted">sin nombre</span>') +
-      '</td></tr>' +
-      '<tr><td class="k">Escribe desde</td><td class="v">' + quien + '</td></tr>' +
-      '<tr><td class="k">Asunto</td><td class="v">' + esc(r.summary.subject || '(sin asunto)') + '</td></tr>' +
-      '</table></div>' +
+      (razones.length
+        ? '<div class="card' + (calma ? ' calma' : '') + '"><h3>' +
+          (calma ? 'Lo único que he visto' : 'Por qué te lo digo') + '</h3>' +
+          razones.map(t => '<div class="motivo"><span class="punto">&#9679;</span><span>' + esc(t) + '</span></div>').join('') +
+          '</div>'
+        : '') +
 
-      (razones.length ? '<div class="card"><h3>Por qué lo digo</h3>' +
-        razones.map(t => '<div class="finding"><span class="sev sev-' +
-          (r.verdict === 'BAJO' ? 'info' : 'high') + '">&#9679;</span><span>' + esc(t) + '</span></div>').join('') +
-        '</div>' : '') +
-
-      '<div class="card"><h3>Qué hacer ahora</h3><ol style="margin:0;padding-left:20px">' +
-      CONSEJOS[r.verdict].map(c => '<li style="margin-bottom:6px">' + esc(c) + '</li>').join('') +
+      '<div class="card"><h3>Qué hacer ahora</h3><ol class="consejos">' +
+      CONSEJOS[r.verdict].map(c => '<li>' + esc(c) + '</li>').join('') +
       '</ol></div>' +
 
-      '<div class="card"><h3>¿A quién aviso?</h3><p class="small">' +
-      'Si tienes dudas, INCIBE te atiende gratis en el <b>017</b>. ' +
-      'Si has perdido dinero, denúncialo en la Policía o la Guardia Civil.</p></div>' +
-
-      '<p class="small">Lo analiza un programa, no una persona. Pilla las estafas de siempre, ' +
-      'pero ni las detecta todas ni acierta siempre.</p>';
+      '<div class="aviso-017"><b>¿Necesitas que te lo confirme alguien?</b><br>' +
+      'INCIBE atiende dudas por tel&eacute;fono en el <b>017</b>, gratis y sin dar tus datos. ' +
+      'Si ya has perdido dinero, denúncialo en la Policía o la Guardia Civil.</div>';
   }
 
   // Fichas públicas de VirusTotal y AbuseIPDB. Es una acción técnica y con
@@ -271,7 +293,15 @@
   function renderResumen(r) {
     const s = r.summary;
     const top = r.findings.filter(f => f.sev === 'high').slice(0, 6);
+    const cls = v => !v ? '' : /^pass$/i.test(v) ? 'pass' : /^(fail|softfail)$/i.test(v) ? 'fail' : 'warn';
     $('#p-resumen').innerHTML =
+      '<div class="card"><h3>De un vistazo</h3><div class="chips">' +
+      ['spf', 'dkim', 'dmarc'].map(k =>
+        '<span class="chip ' + cls(r.auth[k]) + '">' + k.toUpperCase() + ' <b>' + (r.auth[k] || 'n/d') + '</b></span>').join('') +
+      '<span class="chip">saltos <b>' + r.received.length + '</b></span>' +
+      '<span class="chip">enlaces <b>' + s.urlCount + '</b></span>' +
+      '<span class="chip">adjuntos <b>' + r.attachments.length + '</b></span>' +
+      '</div></div>' +
       '<div class="card"><h3>Identidades</h3>' + kv([
         ['From', '<b>' + esc(s.fromDisplay || '') + '</b> &lt;' + esc(s.from || '-') + '&gt;', true],
         ['Dominio organizativo', esc(s.fromOrgDomain)],
@@ -325,7 +355,7 @@
         '<tr><td>' + esc(d.nombre) + '</td>' +
         '<td class="v nowrap">' + d.puntos + '/' + d.techo + '</td>' +
         '<td style="width:40%"><div style="background:var(--bg3);border-radius:3px;height:10px">' +
-        '<div style="width:' + (100 * d.puntos / d.techo) + '%;height:10px;border-radius:3px;background:' +
+        '<div style="width:' + Math.max(0, Math.min(100, 100 * d.puntos / d.techo)) + '%;height:10px;border-radius:3px;background:' +
         (d.puntos === d.techo ? 'var(--high)' : d.puntos ? 'var(--med)' : 'transparent') + '"></div></div></td>' +
         '<td class="v">' + d.bruto + '</td><td class="v">' + d.reglas + '</td></tr>').join('') +
       '<tr><td><b>Total</b></td><td class="v"><b>' + r.score + '/100</b></td>' +
@@ -333,7 +363,8 @@
       '</tbody></table></div>';
     $('#p-hallazgos').innerHTML = desglose + '<div class="card">' + (list.length ? list.map(f =>
       '<div class="finding"><span class="sev sev-' + f.sev + '">' + SEVLABEL[f.sev] + '</span>' +
-      '<span>' + esc(f.msg) + '</span>' + (f.points ? '<span class="pts">+' + f.points + '</span>' : '') + '</div>'
+      '<span>' + esc(f.msg) + (f.fuente ? '<br><span class="muted small">peso ' + f.points + ' &middot; ' + esc(f.fuente) + '</span>' : '') + '</span>' +
+      (f.points ? '<span class="pts">' + (f.points > 0 ? '+' : '') + f.points + '</span>' : '') + '</div>'
     ).join('') : '<span class="muted">Sin hallazgos.</span>') + '</div>';
   }
 
@@ -435,7 +466,8 @@
         ' &middot; <a target="_blank" rel="noopener noreferrer" href="https://www.virustotal.com/gui/file/' + esc(a.sha256) + '">VT</a></div>' : '') +
       a.flags.map(f => '<div class="finding"><span class="sev sev-' + f.sev + '">' + SEVLABEL[f.sev] + '</span><span>' + esc(f.msg) + '</span></div>').join('') +
       '</div>').join('') +
-      '<p class="small">Los hashes se calculan en local (SHA-1/256 con WebCrypto, MD5 en JS). El contenido del adjunto nunca se envia a ningún sitio salvo que pulses "Enriquecer".</p>';
+      '<p class="small">Los hashes se calculan aquí mismo (SHA-1 y SHA-256 con WebCrypto, MD5 en JavaScript). ' +
+      'El contenido del adjunto no se envía a ningún sitio: si pulsas el enlace de VirusTotal solo viaja el hash.</p>';
   }
 
   function renderCuerpo(r) {
@@ -471,10 +503,6 @@
     $('#copyJson').onclick = e => copy(JSON.stringify(r, null, 2), e.target);
   }
 
-  function base(r) {
-    return (r.meta.filename || 'correo').replace(/\.[^.]+$/, '').replace(/[^\w.-]+/g, '_').slice(0, 60);
-  }
-
   // --- eventos -------------------------------------------------------------
   const drop = $('#drop');
   drop.onclick = () => $('#file').click();
@@ -493,7 +521,7 @@
   });
 
   $('#btnReset').onclick = () => {
-    current = null; batch = [];
+    batch = [];
     $('#result').hidden = true; $('#multi').hidden = true; $('#file').value = '';
     ['#btnReset'].forEach(s => $(s).disabled = true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -510,7 +538,7 @@
   function setAdvanced(on) {
     $('#advanced').hidden = !on;
     $('#btnAdv').setAttribute('aria-expanded', on ? 'true' : 'false');
-    $('#btnAdvTxt').textContent = on ? 'Ocultar detalle técnico' : 'Ver detalle técnico';
+    $('#btnAdvTxt').textContent = on ? 'Ocultar el análisis completo' : 'Ver el análisis completo';
     try { localStorage.setItem('phishtriage.avanzado', on ? '1' : '0'); } catch (e) {}
   }
 
@@ -522,7 +550,7 @@
 
   // Aviso si la página no se sirve por HTTPS/localhost (WebCrypto desactivado)
   if (!window.isSecureContext) {
-    $('#offlineBadge').textContent = 'sin contexto seguro: SHA no disponible';
+    $('#offlineBadge').textContent = 'Ábrelo por https: faltan algunos datos';
     $('#offlineBadge').style.color = 'var(--med)';
   }
 })();
