@@ -1,6 +1,8 @@
 # Correos reales: que no se cuele ninguno en el repo
 *.eml
 *.msg
+*.mbox
+corpus/
 
 # Salidas de analisis
 out/

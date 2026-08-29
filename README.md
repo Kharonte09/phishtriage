@@ -178,6 +178,37 @@ python3 -m http.server 8000
 Sírvelo por HTTP y no con `file://`: los hashes SHA usan WebCrypto, que solo
 funciona en contexto seguro (HTTPS o localhost).
 
+## Probarlo contra un corpus de verdad
+
+Los correos de `tests/test.mjs` son sinteticos: sirven para que no se rompa
+nada, no para saber si acierta. Para eso hace falta correo real.
+
+```bash
+node tools/corpus.mjs <carpeta>
+node tools/corpus.mjs <carpeta> --esperado phishing
+node tools/corpus.mjs <carpeta> --esperado legitimo --csv notas.csv
+```
+
+Lee `.eml` sueltos y buzones mbox, saca el reparto de notas y, si le dices que
+esperabas, los correos en los que se equivoca y que reglas mandan en ellos.
+Tambien cuenta cuanto dispara cada regla sobre todo el corpus: con eso y un
+corpus de cada clase sale la razon de verosimilitud de cada indicio, que es lo
+que de verdad deberia decidir su peso.
+
+De donde sacar correos:
+
+| Fuente | Qué trae |
+|---|---|
+| [SpamAssassin public corpus](https://spamassassin.apache.org/old/publiccorpus/) | ham y spam en crudo, con cabeceras. El `hard_ham` es correo legítimo con pinta de spam: justo donde salen los falsos positivos |
+| [Phishing Pot](https://github.com/rf-peixoto/phishing_pot) | ~4.000 `.eml` de phishing recogidos en honeypots, ya anonimizados |
+| [Nazario phishing corpus](https://monkey.org/~jose/phishing/) | el clásico, mbox de phishing, viejo pero con cabeceras completas |
+| [Enron](https://www.cs.cmu.edu/~enron/) | medio millón de correos internos legítimos |
+| Tu carpeta de spam | lo más útil de todo: actual, en español y dirigido a ti |
+
+Un corpus de phishing lleva malware de verdad dentro. El motor no abre adjuntos
+ni sigue enlaces -solo lee bytes-, pero el antivirus va a protestar al
+descomprimirlo. Descomprimelo en una carpeta aparte y no toques nada a mano.
+
 ## Pruebas
 
 ```bash
