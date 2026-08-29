@@ -190,8 +190,10 @@ const TECHOS = (() => {
 })();
 check('los techos de las categorías suman 100',
   r.scoreBreakdown.filter(d => d.cat !== 'combinacion').reduce((s, d) => s + d.techo, 0) === 100);
-check('las combinaciones no pasan de 20',
-  r.scoreBreakdown.filter(d => d.cat === 'combinacion').every(d => d.puntos <= 20));
+const TECHO_COMBOS = +fs.readFileSync(path.join(ROOT, 'assets/parser.js'), 'utf8')
+  .match(/const TECHO_COMBOS = (\d+)/)[1];
+check('las combinaciones no pasan de su techo',
+  r.scoreBreakdown.filter(d => d.cat === 'combinacion').every(d => d.puntos <= TECHO_COMBOS));
 check('ninguna categoría se pasa de su techo', r.scoreBreakdown.every(d => d.puntos <= d.techo));
 check('el total es la suma del desglose, con tope 100',
   Math.min(100, r.scoreBreakdown.reduce((s, d) => s + d.puntos, 0)) === r.score);
@@ -312,9 +314,16 @@ const conFuente = (() => {
 })();
 check('todas las reglas declaran de donde sale su peso',
   conFuente.length === pesos.size, conFuente.length + ' de ' + pesos.size);
-check('la mayoria del peso viene de un motor real, no de mi criterio',
-  conFuente.filter(r => /^(SA|RSP)/.test(r.fuente)).length >= conFuente.length / 2,
-  conFuente.filter(r => /^(SA|RSP)/.test(r.fuente)).length + ' ancladas de ' + conFuente.length);
+// Los pesos salen de medir el motor contra corpus reales. Las que no tienen
+// medida son las que el corpus no cubre, y van declaradas como tal.
+const medidas = conFuente.filter(r => /^LR /.test(r.fuente));
+const sinMedir = conFuente.filter(r => r.pts > 0 && !/^LR /.test(r.fuente));
+check('la mayoria de los pesos sale de una medida, no de mi criterio',
+  medidas.length >= conFuente.length / 2,
+  medidas.length + ' medidas de ' + conFuente.length);
+check('y las que no estan medidas lo dicen',
+  sinMedir.every(r => /sin validar|a mano/.test(r.fuente)),
+  sinMedir.filter(r => !/sin validar|a mano/.test(r.fuente)).map(r => r.id).join());
 check('hay pesos negativos: sin mitigantes todo correo reenviado es sospechoso',
   conFuente.some(r => r.pts < 0));
 check('ninguna regla se pasa sola del techo de su categoria',

@@ -217,6 +217,59 @@
     ['latino',   /[A-Za-z\u00C0-\u024F]/]
   ];
 
+  // Normaliza los cambios de letra habituales del typosquatting antes de
+  // comparar: 0 por o, 1 por l, rn por m, vv por w.
+  function normalizaLeet(s) {
+    return String(s || '').toLowerCase()
+      .replace(/rn/g, 'm').replace(/vv/g, 'w')
+      .replace(/0/g, 'o').replace(/1/g, 'l').replace(/3/g, 'e')
+      .replace(/4/g, 'a').replace(/5/g, 's').replace(/7/g, 't')
+      .replace(/[^a-z]/g, '');
+  }
+
+  // Distancia de edicion, cortando en cuanto pasa del maximo que nos interesa.
+  function distancia(a, b, max) {
+    if (Math.abs(a.length - b.length) > max) return max + 1;
+    let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+    for (let i = 1; i <= a.length; i++) {
+      const fila = [i];
+      let mejor = i;
+      for (let j = 1; j <= b.length; j++) {
+        fila[j] = Math.min(prev[j] + 1, fila[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+        if (fila[j] < mejor) mejor = fila[j];
+      }
+      if (mejor > max) return max + 1;
+      prev = fila;
+    }
+    return prev[b.length];
+  }
+
+  // ¿El dominio imita a una marca conocida sin ser suyo? "paypa1-secure.com"
+  // no lleva la marca dentro como subcadena, asi que la regla de tokens de las
+  // URLs no lo ve.
+  function dominioParecido(orgDomain) {
+    if (!orgDomain) return null;
+    const etiqueta = String(orgDomain).split('.')[0];
+    if (!etiqueta || etiqueta.length < 4) return null;
+    const norm = normalizaLeet(etiqueta);
+    // Sin sustituir letras: si YA es la marca tal cual, es la marca de verdad.
+    // Si solo lo es despues de deshacer los cambios (arnazon -> amazon), es
+    // justo lo contrario: un typosquat.
+    const crudo = String(etiqueta).toLowerCase().replace(/[^a-z]/g, );
+    if (!norm) return null;
+    for (const marca of BRANDS) {
+      if (marca.length < 4) continue;
+      if (crudo === marca) return null;            // es la marca de verdad
+      if (norm === marca) return marca;            // lo es solo tras deshacer los cambios
+      // La marca aparece pegada a otras letras: "paypal-secure", "micros0ft-security"
+      if (norm.length > marca.length && norm.indexOf(marca) >= 0) return marca;
+      // O es la marca con una o dos letras cambiadas
+      const d = distancia(norm, marca, 2);
+      if (d > 0 && d <= (marca.length >= 8 ? 2 : 1)) return marca;
+    }
+    return null;
+  }
+
   function scriptMixto(texto) {
     for (const palabra of String(texto || '').split(/[\s@._\-<>()"',;:]+/)) {
       if (palabra.length < 2) continue;
@@ -763,241 +816,214 @@
   // ---------------------------------------------------------------------------
   // PONDERACION
   //
-  // Los pesos NO estan elegidos a ojo. Cada uno sale de un motor antispam real
-  // cuyas puntuaciones estan ajustadas sobre corpus de correo bueno y malo:
+  // Los pesos salen de medir el motor contra correo real. Corpus usados:
   //
-  //   SA  = Apache SpamAssassin, rules/50_scores.cf. Se usa la 4a columna
-  //         (red + bayes), que es la configuracion de produccion.
-  //         Umbral de spam por defecto: 5.0
-  //   RSP = Rspamd, conf/scores.d/*.conf.
-  //         Umbral de rechazo por defecto: 15.0 (conf/actions.conf)
+  //   P  = Phishing Pot, 8.613 correos de phishing reales de honeypot (2023-25)
+  //   H1 = SpamAssassin hard_ham, 250 correos legitimos comerciales en HTML (2002)
+  //   H2 = Listas publicas de Apache, 3.471 correos legitimos (2025-26)
   //
-  // Normalizacion, para poder mezclar dos escalas distintas:
+  // Ninguno de los dos corpus legitimos vale por si solo: H1 tiene el HTML
+  // comercial pero es anterior a SPF/DKIM/DMARC, y H2 tiene la autenticacion
+  // moderna pero es texto plano de listas tecnicas. Asi que para cada regla se
+  // toma el PEOR caso legitimo de los dos, y de ahi la razon de verosimilitud:
   //
-  //   pts = redondeo( media( peso_fuente / umbral_fuente ) x 50 )
+  //   LR = P(la regla dispara | phishing) / P(la regla dispara | legitimo)
+  //   pts = redondeo( 3.5 x log2(LR) )
   //
-  // El x50 mapea el "esto es spam" de cada motor sobre el 50 de PhishTriage,
-  // que es donde empieza ALTO = "tratalo como una estafa". Asi un indicio que
-  // para SpamAssassin vale la mitad de su umbral, aqui vale 25.
+  // Una LR de 1 significa que el indicio no distingue nada, por grave que
+  // suene. Una de 30 significa que aparece treinta veces mas en el fraude.
   //
-  // El campo "fuente" de cada regla deja la cuenta a la vista. Las marcadas
-  // como PT no tienen equivalente en ningun motor: son aportacion de esta
-  // herramienta y son las unicas puestas a criterio propio.
+  // El campo `fuente` lleva los porcentajes medidos. Se regenera con:
+  //   node tools/verosimilitud.mjs <phishing> <legitimo>
   //
-  // Cada regla suma dentro de su categoria y cada categoria tiene un techo
-  // (mismo mecanismo que el max_score de los grupos de Rspamd). Los techos
-  // suman 100.
+  // TRES AVISOS sobre los datos, que hay que tener presentes al tocar esto:
   //
-  // Dos cambios de fondo respecto de la primera version:
+  //  1. El 98,5% del corpus de phishing lo recibio Microsoft, frente al 8,1%
+  //     del legitimo. Todo lo que escriba el receptor esta contaminado:
+  //     `compauth` sale en el 72% del phishing y en el 0% del ham, pero eso
+  //     mide quien recibio el correo, no si es fraude. Su peso esta puesto a
+  //     mano por lo que significa, no por la medida.
+  //  2. H2 son listas de correo, que reescriben Reply-To y rompen el
+  //     alineamiento por diseño. Por eso replyto-mismatch y align-* disparan
+  //     tanto en legitimo. Es real para listas, no para correo normal.
+  //  3. Las reglas con 0,0% en ambos corpus no estan validadas: no hay datos,
+  //     ni a favor ni en contra. Se quedan con peso moderado porque son
+  //     precisas por construccion (un RTLO en un nombre de fichero no aparece
+  //     por accidente), pero nadie las ha comprobado contra nada.
   //
-  //  1. La autenticacion pesa MUCHO menos. No es opinion: SpamAssassin puntua
-  //     SPF_FAIL con 0.001 sobre 5.0, practicamente cero, porque el SPF falla
-  //     constantemente en correo legitimo reenviado. El que manda es DMARC,
-  //     que es la conclusion de SPF y DKIM (RFC 7489), no un tercer voto que
-  //     se suma a los otros dos.
-  //  2. Hay pesos NEGATIVOS. Los dos motores los usan, y son lo que evita que
-  //     un boletin legitimo o una lista de correo acaben en MEDIO.
+  // LO QUE LA MEDIDA CAMBIO RESPECTO DE LA VERSION ANTERIOR:
+  //
+  //  - La version anterior anclaba los pesos a SpamAssassin y Rspamd. Estaba
+  //    mal: esos motores llegan a su umbral sumando cientos de reglas mas
+  //    Bayes mas listas negras de red. Este tiene sesenta reglas y ninguna
+  //    consulta de red, asi que importar sus pesos por regla garantizaba no
+  //    llegar nunca. Detectaba el 2,1% del phishing real.
+  //  - Los mitigantes negativos eran contraproducentes. El 24% del phishing
+  //    real pasa DMARC -lo mandan desde tenants de Microsoft 365 robados- y el
+  //    60% activaba algun mitigante. Se les baja a la minima expresion.
+  //  - dn-brand valia 14 puntos y dispara MAS en correo legitimo (9,8% vs
+  //    11,1%): las marcas se llaman por su nombre en su propio correo.
+  //  - url-mismatch, el caso que encabeza el README, tiene LR 1,0. No
+  //    distingue. Hoy casi todo se lee en el movil, donde no se ve la URL, y
+  //    el atacante ya no se molesta.
   // ---------------------------------------------------------------------------
   const CATEGORIAS = {
-    auth:       { techo: 15, nombre: 'Autenticación' },
-    identidad:  { techo: 23, nombre: 'Identidad del remitente' },
-    enlaces:    { techo: 24, nombre: 'Enlaces' },
-    adjuntos:   { techo: 18, nombre: 'Adjuntos' },
+    auth:       { techo: 30, nombre: 'Autenticación' },
+    identidad:  { techo: 20, nombre: 'Identidad del remitente' },
+    enlaces:    { techo: 20, nombre: 'Enlaces' },
     contenido:  { techo: 15, nombre: 'Contenido del mensaje' },
+    adjuntos:   { techo: 10, nombre: 'Adjuntos' },
     transporte: { techo: 5, nombre: 'Transporte y cabeceras' }
   };
 
   const PESOS = {
-    // --- Autenticación (techo 15) --------------------------------------------
-    // DMARC es el veredicto (RFC 7489); SPF y DKIM son sus insumos y por eso
-    // valen casi nada por separado. Antes se sumaban los tres y un mismo hecho
-    // puntuaba tres veces: 75 puntos brutos por un solo fallo.
-    'dmarc-fail':      { cat: 'auth', pts: 12, sev: 'high',
-                         fuente: 'SA DMARC_REJECT 1.797/5 + RSP DMARC_POLICY_REJECT 2.0/15' },
-    'dmarc-none':      { cat: 'auth', pts: 4, sev: 'low',
-                         fuente: 'SA DMARC_NONE 0.898/5 + RSP DMARC_NA 0.0/15' },
-    'dmarc-absent':    { cat: 'auth', pts: 0, sev: 'info',
-                         fuente: 'SA DMARC_MISSING 0.001/5 + RSP DMARC_NA 0.0/15' },
-    'spf-fail':        { cat: 'auth', pts: 2, sev: 'low',
-                         fuente: 'SA SPF_FAIL 0.001/5 + RSP R_SPF_FAIL 1.0/15' },
-    'spf-softfail':    { cat: 'auth', pts: 3, sev: 'low',
-                         fuente: 'SA SPF_SOFTFAIL 0.665/5 + RSP R_SPF_SOFTFAIL 0.0/15' },
-    'spf-neutral':     { cat: 'auth', pts: 4, sev: 'low',
-                         fuente: 'SA SPF_NEUTRAL 0.779/5 + RSP R_SPF_NEUTRAL 0.0/15' },
-    'spf-absent':      { cat: 'auth', pts: 0, sev: 'info', fuente: 'SA SPF_NONE 0.001/5' },
-    'dkim-fail':       { cat: 'auth', pts: 2, sev: 'low',
-                         fuente: 'SA DKIM_INVALID 0.1/5 + RSP R_DKIM_REJECT 1.0/15' },
-    'dkim-absent':     { cat: 'auth', pts: 0, sev: 'info', fuente: 'RSP R_DKIM_NA 0.0/15' },
-    'compauth':        { cat: 'auth', pts: 5, sev: 'medium',
-                         fuente: 'PT - compauth de Microsoft, sin equivalente directo' },
-    // Alineamiento calculado a mano: solo cuenta cuando NO hubo veredicto
-    // DMARC, porque si lo hubo ya esta contado ahi.
-    'align-none':      { cat: 'auth', pts: 8, sev: 'high',
-                         fuente: 'PT - test de alineamiento del RFC 7489 calculado en local' },
-    'align-dkim':      { cat: 'auth', pts: 3, sev: 'low',
-                         fuente: 'PT - alineamiento DKIM del RFC 7489' },
-    'no-transport':    { cat: 'auth', pts: 0, sev: 'info', fuente: 'informativo' },
+    // --- Autenticación (techo 30) --------------------------------------------
+    // Lo que mas informa de todo, y no por el fallo en si: por lo que dice del
+    // dominio que envia. Un dominio que no publica DMARC aparece en el 44% del
+    // phishing y en el 3% del correo bueno.
+    'dkim-fail':       { cat: 'auth', pts: 19, sev: 'high',  fuente: 'LR 41.5 (P 9.5% / H 0.0%)' },
+    'dmarc-fail':      { cat: 'auth', pts: 19, sev: 'high',  fuente: 'LR 39.0 (P 7.8% / H 0.0%)' },
+    'spf-fail':        { cat: 'auth', pts: 18, sev: 'high',  fuente: 'LR 32.8 (P 9.4% / H 0.1%)' },
+    'spf-softfail':    { cat: 'auth', pts: 16, sev: 'medium', fuente: 'LR 26.3 (P 5.2% / H 0.0%)' },
+    'spf-neutral':     { cat: 'auth', pts: 15, sev: 'medium', fuente: 'LR 18.9 (P 28.8% / H 1.3%)' },
+    'dmarc-none':      { cat: 'auth', pts: 13, sev: 'medium', fuente: 'LR 12.4 (P 43.9% / H 3.3%)' },
+    // Puesto a mano: la medida esta contaminada por el receptor (aviso 1).
+    // Cuando Microsoft dice que la autenticacion compuesta falla, lo dice con
+    // mucha mas informacion de la que tenemos aqui.
+    'compauth':        { cat: 'auth', pts: 12, sev: 'medium', fuente: 'a mano - veredicto de Microsoft, medida contaminada por el receptor' },
+    // Dispara en el 0,1% del phishing y en el 11% del legitimo: las listas de
+    // correo rompen el alineamiento por diseño. Era 8 puntos.
+    'align-none':      { cat: 'auth', pts: 0, sev: 'info',  fuente: 'LR 0.0 (P 0.1% / H 11.1%) - no distingue' },
+    'align-dkim':      { cat: 'auth', pts: 0, sev: 'info',  fuente: 'LR 0.1 (P 0.3% / H 3.4%) - no distingue' },
+    'spf-absent':      { cat: 'auth', pts: 0, sev: 'info',  fuente: 'ausencia de datos, no indicio' },
+    'dkim-absent':     { cat: 'auth', pts: 0, sev: 'info',  fuente: 'ausencia de datos, no indicio' },
+    'dmarc-absent':    { cat: 'auth', pts: 0, sev: 'info',  fuente: 'ausencia de datos, no indicio' },
+    'no-transport':    { cat: 'auth', pts: 0, sev: 'info',  fuente: 'informativo' },
 
-    // Mitigantes: restan. Los dos motores los usan, y son lo que separa un
-    // boletin legitimo de un fraude.
-    'ok-arc':          { cat: 'auth', pts: -3, sev: 'info', fuente: 'RSP ARC_ALLOW -1.0/15' },
-    'ok-dmarc':        { cat: 'auth', pts: -2, sev: 'info', fuente: 'RSP DMARC_POLICY_ALLOW -0.5/15' },
-    'ok-dkim':         { cat: 'auth', pts: -1, sev: 'info',
-                         fuente: 'SA DKIM_VALID_AU -0.1/5 + RSP R_DKIM_ALLOW -0.2/15' },
-    'ok-spf':          { cat: 'auth', pts: -1, sev: 'info', fuente: 'RSP R_SPF_ALLOW -0.2/15' },
+    // Mitigantes. El 24% del phishing real pasa DMARC y el 60% activaba alguno
+    // de estos, asi que restar de verdad era premiar al atacante que manda
+    // desde una cuenta robada. Se quedan en un gesto: separan al que autentica
+    // del que no, pero no rescatan a nadie.
+    'ok-arc':          { cat: 'auth', pts: -1, sev: 'info', fuente: 'a mano - reenvio legitimo; el 60% del phishing tambien lo activaba' },
+    'ok-dmarc':        { cat: 'auth', pts: -1, sev: 'info', fuente: 'a mano - el 24% del phishing real pasa DMARC' },
+    'ok-dkim':         { cat: 'auth', pts: 0, sev: 'info',  fuente: 'a mano - no distingue por si solo' },
+    'ok-spf':          { cat: 'auth', pts: 0, sev: 'info',  fuente: 'a mano - no distingue por si solo' },
 
-    // --- Identidad del remitente (techo 23) ----------------------------------
-    // El indicio mas fuerte de todo el motor segun el corpus de SpamAssassin:
-    // si respondes, la respuesta se va a un freemail distinto del que firma.
-    'replyto-freemail':{ cat: 'identidad', pts: 21, sev: 'high',
-                         fuente: 'SA FREEMAIL_FORGED_REPLYTO 2.095/5' },
-    'dn-mixed-script': { cat: 'identidad', pts: 17, sev: 'high',
-                         fuente: 'RSP R_MIXED_CHARSET 5.0/15' },
-    'from-punycode':   { cat: 'identidad', pts: 17, sev: 'high',
-                         fuente: 'RSP URL_HOMOGRAPH_ATTACK 5.0/15' },
-    'dn-email':        { cat: 'identidad', pts: 14, sev: 'high',
-                         fuente: 'PT - suplantacion en el nombre visible' },
-    'dn-brand':        { cat: 'identidad', pts: 14, sev: 'high',
-                         fuente: 'PT - marca suplantada en el nombre visible' },
-    'from-freemail-cargo': { cat: 'identidad', pts: 12, sev: 'high',
-                         fuente: 'PT - patron BEC (FBI IC3: mayor perdida economica declarada)' },
-    'replyto-mismatch':{ cat: 'identidad', pts: 10, sev: 'medium',
-                         fuente: 'SA FREEMAIL_REPLYTO 1.0/5' },
-    'from-tld':        { cat: 'identidad', pts: 10, sev: 'medium',
-                         fuente: 'RSP URL_SUSPICIOUS_TLD 3.0/15' },
-    'from-multi':      { cat: 'identidad', pts: 7, sev: 'medium',
-                         fuente: 'RSP FORGED_RECIPIENTS 2.0/15' },
-    'from-missing':    { cat: 'identidad', pts: 7, sev: 'medium',
-                         fuente: 'RSP FORGED_RECIPIENTS 2.0/15' },
-    'mid-missing':     { cat: 'identidad', pts: 5, sev: 'low',
-                         fuente: 'SA MISSING_MID 0.497/5' },
-    'mid-mismatch':    { cat: 'identidad', pts: 3, sev: 'low', fuente: 'PT' },
-    // Antes 15 puntos. Return-Path distinto del From es como manda el correo
-    // TODO proveedor de envio masivo del mundo. Rspamd lo puntua con 0.3 sobre
-    // 15, y con 0.0 cuando el correo viene de una lista.
-    'rp-mismatch':     { cat: 'identidad', pts: 1, sev: 'low',
-                         fuente: 'RSP FORGED_SENDER 0.3/15 (FORGED_SENDER_MAILLIST 0.0)' },
+    // --- Identidad del remitente (techo 20) ----------------------------------
+    // From mal formado: coma sin comillas en el nombre visible, que parte la
+    // cabecera en dos. El cliente enseña una cosa y el filtro lee otra.
+    // Aparece en el 18,6% del phishing y en cero correos legitimos de 3.721.
+    'from-malformed':  { cat: 'identidad', pts: 20, sev: 'high', fuente: 'LR 93.4 (P 18.6% / H 0.0%)' },
+    'from-tld':        { cat: 'identidad', pts: 13, sev: 'high', fuente: 'LR 13.3 (P 3.0% / H 0.0%)' },
+    'replyto-freemail':{ cat: 'identidad', pts: 6, sev: 'medium', fuente: 'LR 3.1 (P 0.6% / H 0.0%)' },
+    'dn-mixed-script': { cat: 'identidad', pts: 5, sev: 'medium', fuente: 'LR 2.6 (P 0.5% / H 0.0%)' },
+    'from-multi':      { cat: 'identidad', pts: 5, sev: 'medium', fuente: 'sin validar - varias direcciones reales en From' },
+    'from-punycode':   { cat: 'identidad', pts: 12, sev: 'high', fuente: 'sin validar (0% en ambos corpus) - preciso por construccion' },
+    'from-lookalike':  { cat: 'identidad', pts: 12, sev: 'high', fuente: 'sin validar - dominio que imita a una marca' },
+    'from-freemail-cargo': { cat: 'identidad', pts: 8, sev: 'high', fuente: 'sin validar - patron BEC (FBI IC3)' },
+    'dn-email':        { cat: 'identidad', pts: 0, sev: 'info', fuente: 'LR 0.4 (P 0.4% / H 0.8%) - no distingue' },
+    // Valia 14 puntos. Dispara mas en correo legitimo: las marcas se llaman
+    // por su nombre en su propio correo.
+    'dn-brand':        { cat: 'identidad', pts: 0, sev: 'info', fuente: 'LR 0.9 (P 9.8% / H 11.1%) - no distingue' },
+    'replyto-mismatch':{ cat: 'identidad', pts: 0, sev: 'info', fuente: 'LR 0.3 (P 15.2% / H 46.1%) - no distingue' },
+    'rp-mismatch':     { cat: 'identidad', pts: 0, sev: 'info', fuente: 'LR 0.8 (P 13.8% / H 17.6%) - no distingue' },
+    'mid-mismatch':    { cat: 'identidad', pts: 0, sev: 'info', fuente: 'LR 0.4 (P 28.1% / H 64.0%) - no distingue' },
+    'mid-missing':     { cat: 'identidad', pts: 0, sev: 'info', fuente: 'LR 0.4 (P 0.1% / H 0.0%) - no distingue' },
+    'from-missing':    { cat: 'identidad', pts: 0, sev: 'info', fuente: 'LR 0.3 (P 0.1% / H 0.0%) - no distingue' },
 
-    // --- Enlaces (techo 24) ---------------------------------------------------
-    'url-zerowidth':   { cat: 'enlaces', pts: 23, sev: 'high',
-                         fuente: 'RSP URL_ZERO_WIDTH_SPACES 7.0/15' },
-    'url-rtlo':        { cat: 'enlaces', pts: 20, sev: 'high',
-                         fuente: 'RSP URL_RTL_OVERRIDE 6.0/15' },
-    'url-punycode':    { cat: 'enlaces', pts: 17, sev: 'high',
-                         fuente: 'RSP URL_HOMOGRAPH_ATTACK 5.0/15' },
-    'url-mismatch':    { cat: 'enlaces', pts: 13, sev: 'high',
-                         fuente: 'RSP PHISHING 4.0/15' },
-    'url-brand':       { cat: 'enlaces', pts: 13, sev: 'high',
-                         fuente: 'RSP PHISHING 4.0/15' },
-    'url-data':        { cat: 'enlaces', pts: 13, sev: 'high',
-                         fuente: 'PT - data: URI, sin equivalente directo' },
-    'url-multi-at':    { cat: 'enlaces', pts: 10, sev: 'high',
-                         fuente: 'RSP URL_MULTIPLE_AT_SIGNS 3.0/15' },
-    'url-tld':         { cat: 'enlaces', pts: 10, sev: 'medium',
-                         fuente: 'RSP URL_SUSPICIOUS_TLD 3.0/15' },
-    'url-userinfo':    { cat: 'enlaces', pts: 7, sev: 'medium',
-                         fuente: 'RSP URL_USER_PASSWORD 2.0/15' },
-    'url-subdomains':  { cat: 'enlaces', pts: 7, sev: 'low',
-                         fuente: 'RSP URL_EXCESSIVE_DOTS 2.0/15' },
-    'url-no-tld':      { cat: 'enlaces', pts: 7, sev: 'medium',
-                         fuente: 'RSP URL_NO_TLD 2.0/15' },
-    // Antes 20. Rspamd lo puntua con 1.5 sobre 15: enlazar a una IP es raro,
-    // pero lo hacen tambien sistemas internos y avisos de aparatos.
-    'url-ip':          { cat: 'enlaces', pts: 5, sev: 'medium',
-                         fuente: 'RSP URL_NUMERIC_IP 1.5/15' },
-    'url-creds':       { cat: 'enlaces', pts: 5, sev: 'medium', fuente: 'PT' },
-    'url-http':        { cat: 'enlaces', pts: 4, sev: 'medium', fuente: 'PT' },
-    'url-port':        { cat: 'enlaces', pts: 4, sev: 'medium', fuente: 'PT' },
-    'url-shortener':   { cat: 'enlaces', pts: 3, sev: 'low',
-                         fuente: 'RSP URL_REDIRECTOR_NESTED 1.0/15' },
-    'url-filehost':    { cat: 'enlaces', pts: 2, sev: 'low', fuente: 'PT' },
-    'url-redirector':  { cat: 'enlaces', pts: 0, sev: 'info',
-                         fuente: 'RSP REDIRECTOR_FALSE 0.0' },
-
-    // --- Adjuntos (techo 18) --------------------------------------------------
-    'att-archive-nested': { cat: 'adjuntos', pts: 17, sev: 'high',
-                         fuente: 'RSP MIME_ARCHIVE_IN_ARCHIVE 5.0/15' },
-    'att-exec':        { cat: 'adjuntos', pts: 13, sev: 'high',
-                         fuente: 'RSP MIME_BAD_ATTACHMENT 4.0/15' },
-    'att-macro':       { cat: 'adjuntos', pts: 13, sev: 'high',
-                         fuente: 'RSP MIME_BAD_ATTACHMENT 4.0/15' },
-    'att-double':      { cat: 'adjuntos', pts: 10, sev: 'high',
-                         fuente: 'RSP MIME_DOUBLE_BAD_EXTENSION 3.0/15' },
-    'att-html':        { cat: 'adjuntos', pts: 10, sev: 'high',
-                         fuente: 'RSP MIME_BAD_EXTENSION 2.0/15 + PT (HTML smuggling)' },
-    'att-mismatch':    { cat: 'adjuntos', pts: 10, sev: 'high',
-                         fuente: 'RSP MIME_BAD 1.0/15 + PT (magic vs extension)' },
-    'att-encrypted':   { cat: 'adjuntos', pts: 7, sev: 'high',
-                         fuente: 'RSP MIME_ENCRYPTED_ARCHIVE 2.0/15' },
-    // Antes 22. Rspamd lo puntua con 2.0 sobre 15.
-    'att-rtlo':        { cat: 'adjuntos', pts: 7, sev: 'high',
-                         fuente: 'RSP MIME_BAD_UNICODE 2.0/15' },
-    'att-ole':         { cat: 'adjuntos', pts: 5, sev: 'medium',
-                         fuente: 'RSP MIME_BAD 1.0/15' },
-    'att-container':   { cat: 'adjuntos', pts: 4, sev: 'low',
-                         fuente: 'RSP MIME_BAD_EXTENSION 2.0/15' },
-    'att-empty':       { cat: 'adjuntos', pts: 0, sev: 'info', fuente: 'informativo' },
+    // --- Enlaces (techo 20) ---------------------------------------------------
+    'url-tld':         { cat: 'enlaces', pts: 17, sev: 'high', fuente: 'LR 30.6 (P 6.1% / H 0.0%)' },
+    'url-userinfo':    { cat: 'enlaces', pts: 10, sev: 'high', fuente: 'LR 7.9 (P 1.6% / H 0.0%)' },
+    'url-shortener':   { cat: 'enlaces', pts: 10, sev: 'medium', fuente: 'LR 7.4 (P 13.3% / H 1.6%)' },
+    'url-ip':          { cat: 'enlaces', pts: 6, sev: 'medium', fuente: 'LR 3.3 (P 5.9% / H 1.6%)' },
+    'url-subdomains':  { cat: 'enlaces', pts: 5, sev: 'low', fuente: 'LR 2.7 (P 4.9% / H 1.6%)' },
+    // Sin validar: cero apariciones en los tres corpus. Se quedan porque no
+    // aparecen por accidente, pero nadie las ha comprobado.
+    'url-rtlo':        { cat: 'enlaces', pts: 15, sev: 'high', fuente: 'sin validar (0% en ambos) - preciso por construccion' },
+    'url-zerowidth':   { cat: 'enlaces', pts: 15, sev: 'high', fuente: 'sin validar (0% en ambos) - preciso por construccion' },
+    'url-punycode':    { cat: 'enlaces', pts: 14, sev: 'high', fuente: 'sin validar (0% en ambos) - preciso por construccion' },
+    'url-multi-at':    { cat: 'enlaces', pts: 12, sev: 'high', fuente: 'sin validar - preciso por construccion' },
+    'url-data':        { cat: 'enlaces', pts: 10, sev: 'high', fuente: 'sin validar - preciso por construccion' },
+    // El caso que encabeza el README. LR 1,0: no distingue.
+    'url-mismatch':    { cat: 'enlaces', pts: 3, sev: 'low', fuente: 'LR 1.0 (P 3.5% / H 3.2%) - apenas distingue' },
+    'url-no-tld':      { cat: 'enlaces', pts: 0, sev: 'info', fuente: 'LR 1.0 (P 1.6% / H 1.3%) - no distingue' },
+    'url-brand':       { cat: 'enlaces', pts: 0, sev: 'info', fuente: 'LR 0.1 (P 0.8% / H 12.0%) - no distingue' },
+    'url-creds':       { cat: 'enlaces', pts: 0, sev: 'info', fuente: 'LR 0.1 (P 6.7% / H 53.2%) - no distingue' },
+    'url-http':        { cat: 'enlaces', pts: 0, sev: 'info', fuente: 'LR 0.0 (P 0.7% / H 43.6%) - no distingue' },
+    'url-port':        { cat: 'enlaces', pts: 0, sev: 'info', fuente: 'LR 0.0 (P 0.0% / H 1.2%) - no distingue' },
+    'url-filehost':    { cat: 'enlaces', pts: 0, sev: 'info', fuente: 'LR 0.6 (P 0.4% / H 0.5%) - no distingue' },
+    'url-redirector':  { cat: 'enlaces', pts: 0, sev: 'info', fuente: 'informativo' },
 
     // --- Contenido del mensaje (techo 15) -------------------------------------
-    'body-password':   { cat: 'contenido', pts: 13, sev: 'high',
-                         fuente: 'PT - contraseña pedida en el correo, anclado a RSP PHISHING 4.0/15' },
-    'body-image':      { cat: 'contenido', pts: 11, sev: 'medium',
-                         fuente: 'SA HTML_IMAGE_ONLY_16 1.092/5' },
-    'body-form':       { cat: 'contenido', pts: 10, sev: 'high', fuente: 'PT' },
-    'body-script':     { cat: 'contenido', pts: 8, sev: 'high', fuente: 'PT' },
-    'body-refresh':    { cat: 'contenido', pts: 8, sev: 'high', fuente: 'PT' },
-    'body-bec':        { cat: 'contenido', pts: 8, sev: 'high', fuente: 'PT - patron BEC' },
-    'body-iban':       { cat: 'contenido', pts: 6, sev: 'medium', fuente: 'PT' },
-    'body-hidden':     { cat: 'contenido', pts: 5, sev: 'low', fuente: 'PT' },
-    'body-crypto':     { cat: 'contenido', pts: 5, sev: 'medium', fuente: 'PT' },
-    'body-nocontacto': { cat: 'contenido', pts: 5, sev: 'medium', fuente: 'PT' },
-    'body-iframe':     { cat: 'contenido', pts: 5, sev: 'medium', fuente: 'PT' },
-    'body-empty':      { cat: 'contenido', pts: 4, sev: 'low', fuente: 'PT' },
-    'subj-urgency':    { cat: 'contenido', pts: 4, sev: 'low', fuente: 'PT' },
-    'subj-nothread':   { cat: 'contenido', pts: 4, sev: 'low', fuente: 'PT' },
-    'body-entities':   { cat: 'contenido', pts: 3, sev: 'low', fuente: 'PT' },
+    'body-image':      { cat: 'contenido', pts: 15, sev: 'high', fuente: 'LR 29.3 (P 5.8% / H 0.0%), recortado al techo' },
+    'subj-urgency':    { cat: 'contenido', pts: 14, sev: 'medium', fuente: 'LR 15.5 (P 5.7% / H 0.2%)' },
+    'body-crypto':     { cat: 'contenido', pts: 10, sev: 'medium', fuente: 'LR 7.7 (P 13.9% / H 1.6%)' },
+    'body-bec':        { cat: 'contenido', pts: 4, sev: 'medium', fuente: 'LR 2.2 (P 3.9% / H 1.6%)' },
+    'body-hidden':     { cat: 'contenido', pts: 5, sev: 'low', fuente: 'LR 2.5 (P 37.5% / H 14.8%)' },
+    'body-password':   { cat: 'contenido', pts: 12, sev: 'high', fuente: 'sin validar - preciso por construccion' },
+    'body-iban':       { cat: 'contenido', pts: 8, sev: 'medium', fuente: 'sin validar - patron BEC' },
+    'body-nocontacto': { cat: 'contenido', pts: 8, sev: 'medium', fuente: 'sin validar - patron BEC' },
+    'body-refresh':    { cat: 'contenido', pts: 6, sev: 'medium', fuente: 'sin validar' },
+    'body-empty':      { cat: 'contenido', pts: 0, sev: 'info', fuente: 'LR 0.4 - no distingue' },
+    'subj-nothread':   { cat: 'contenido', pts: 0, sev: 'info', fuente: 'LR 1.0 (P 1.9% / H 1.6%) - no distingue' },
+    // El HTML de 2002 llevaba scripts, iframes y formularios de serie, y el
+    // phishing de hoy casi no los usa. Los cuatro disparan mas en correo bueno.
+    'body-form':       { cat: 'contenido', pts: 0, sev: 'info', fuente: 'LR 0.0 (P 0.6% / H 34.0%) - no distingue' },
+    'body-script':     { cat: 'contenido', pts: 0, sev: 'info', fuente: 'LR 0.1 (P 1.6% / H 25.2%) - no distingue' },
+    'body-iframe':     { cat: 'contenido', pts: 0, sev: 'info', fuente: 'LR 0.0 (P 0.7% / H 24.0%) - no distingue' },
+    'body-entities':   { cat: 'contenido', pts: 0, sev: 'info', fuente: 'LR 0.0 (P 0.4% / H 8.4%) - no distingue' },
+
+    // --- Adjuntos (techo 10) --------------------------------------------------
+    // Cero adjuntos peligrosos en 8.613 correos de phishing: hoy el fraude va
+    // por enlace, no por fichero. Se quedan por si acaso, sin validar.
+    'att-exec':        { cat: 'adjuntos', pts: 10, sev: 'high', fuente: 'sin validar (0% en el corpus)' },
+    'att-archive-nested': { cat: 'adjuntos', pts: 10, sev: 'high', fuente: 'sin validar (0% en el corpus)' },
+    'att-macro':       { cat: 'adjuntos', pts: 10, sev: 'high', fuente: 'sin validar (0% en el corpus)' },
+    'att-encrypted':   { cat: 'adjuntos', pts: 9, sev: 'high', fuente: 'sin validar (0% en el corpus)' },
+    'att-rtlo':        { cat: 'adjuntos', pts: 9, sev: 'high', fuente: 'sin validar (0% en el corpus)' },
+    'att-double':      { cat: 'adjuntos', pts: 8, sev: 'high', fuente: 'sin validar (0% en el corpus)' },
+    'att-mismatch':    { cat: 'adjuntos', pts: 8, sev: 'high', fuente: 'sin validar (0% en el corpus)' },
+    'att-html':        { cat: 'adjuntos', pts: 6, sev: 'medium', fuente: 'LR 0.6 (P 0.1% / H 0.0%) - pocos datos' },
+    'att-ole':         { cat: 'adjuntos', pts: 4, sev: 'medium', fuente: 'sin validar' },
+    'att-container':   { cat: 'adjuntos', pts: 0, sev: 'info', fuente: 'LR 0.1 - no distingue' },
+    'att-empty':       { cat: 'adjuntos', pts: 0, sev: 'info', fuente: 'informativo' },
 
     // --- Transporte y cabeceras (techo 5) -------------------------------------
-    'xmailer':         { cat: 'transporte', pts: 5, sev: 'medium',
-                         fuente: 'SA FORGED_MUA_OUTLOOK 1.927/5, recortado por el techo' },
-    'rcv-none':        { cat: 'transporte', pts: 5, sev: 'medium',
-                         fuente: 'RSP ONCE_RECEIVED_STRICT 4.0/15, recortado por el techo' },
-    'date-missing':    { cat: 'transporte', pts: 5, sev: 'medium',
-                         fuente: 'SA MISSING_DATE 1.360/5' },
-    'date-skew':       { cat: 'transporte', pts: 3, sev: 'low', fuente: 'PT' },
-    'rcv-delay':       { cat: 'transporte', pts: 2, sev: 'low', fuente: 'PT' },
-    // Antes 3, y saltaba en practicamente todo correo analizado, incluidos
-    // todos los legitimos. Rspamd lo puntua con 0.1 sobre 15.
-    'rcv-one':         { cat: 'transporte', pts: 0, sev: 'info',
-                         fuente: 'RSP ONCE_RECEIVED 0.1/15' },
+    'xmailer':         { cat: 'transporte', pts: 5, sev: 'medium', fuente: 'LR 17.4 (P 3.5% / H 0.0%), recortado por el techo' },
+    'date-skew':       { cat: 'transporte', pts: 3, sev: 'low', fuente: 'LR 1.9 (P 1.2% / H 0.4%)' },
+    'rcv-none':        { cat: 'transporte', pts: 3, sev: 'low', fuente: 'sin validar' },
+    'date-missing':    { cat: 'transporte', pts: 2, sev: 'low', fuente: 'sin validar' },
+    'rcv-delay':       { cat: 'transporte', pts: 0, sev: 'info', fuente: 'LR 0.1 (P 3.4% / H 22.8%) - no distingue' },
+    'rcv-one':         { cat: 'transporte', pts: 0, sev: 'info', fuente: 'LR ~1 - no distingue' },
     'x-orig-ip':       { cat: 'transporte', pts: 0, sev: 'info', fuente: 'informativo' }
   };
 
-  // Hay combinaciones que valen mas que la suma de sus partes. Un correo que
-  // pide una transferencia NO es sospechoso por pedirla, ni por venir de un
-  // gmail, ni por traer un IBAN: lo es porque hace las tres cosas a la vez.
-  // Esto es aportacion de PhishTriage: ningun motor antispam correlaciona asi,
-  // porque ellos clasifican correo masivo y esto analiza un correo concreto.
+  // Correlaciones. La de credenciales estaba montada sobre dos indicios
+  // debiles y disparaba catorce veces mas en correo legitimo que en fraude
+  // (1,1% vs 15,2%): pedia (formulario O ruta con palabra de login) Y (marca
+  // en subdominio O texto que no cuadra), y todo eso es un boletin comercial
+  // normal. Ahora exige la contraseña pedida en el propio correo, que es el
+  // hecho que de verdad define el robo de credenciales.
   const COMBOS = [
-    { id: 'combo-bec', pts: 20, sev: 'high',
+    { id: 'combo-bec', pts: 22, sev: 'high',
       msg: 'Encaja con el fraude del jefe: alguien que dice ser de la empresa, desde una cuenta que no es la suya, pidiendo un pago',
-      si: ids => (ids.has('from-freemail-cargo') || ids.has('replyto-freemail') || ids.has('dn-brand') || ids.has('dn-email'))
-        && (ids.has('body-bec') || ids.has('body-iban')) },
+      si: ids => (ids.has('from-freemail-cargo') || ids.has('replyto-freemail'))
+        && (ids.has('body-bec') || ids.has('body-iban') || ids.has('body-nocontacto')) },
     { id: 'combo-credenciales', pts: 18, sev: 'high',
       msg: 'Encaja con el robo de contraseñas: te lleva a una página falsa y te pide que te identifiques',
-      si: ids => (ids.has('body-password') || ids.has('body-form') || ids.has('url-creds'))
-        && (ids.has('url-mismatch') || ids.has('url-brand') || ids.has('url-punycode') || ids.has('url-ip')) },
+      si: ids => ids.has('body-password')
+        && (ids.has('url-mismatch') || ids.has('url-punycode') || ids.has('url-ip') || ids.has('url-tld')) },
     { id: 'combo-malware', pts: 18, sev: 'high',
       msg: 'Encaja con el envío de malware: adjunto peligroso y una excusa para que lo abras deprisa',
-      si: ids => (ids.has('att-exec') || ids.has('att-macro') || ids.has('att-html') || ids.has('att-encrypted'))
-        && (ids.has('body-empty') || ids.has('subj-urgency') || ids.has('subj-nothread') || ids.has('dmarc-fail')) },
+      si: ids => (ids.has('att-exec') || ids.has('att-macro') || ids.has('att-encrypted') || ids.has('att-archive-nested'))
+        && (ids.has('body-empty') || ids.has('subj-urgency') || ids.has('dmarc-fail') || ids.has('spf-fail')) },
     { id: 'combo-extorsion', pts: 15, sev: 'high',
       msg: 'Encaja con la extorsión: amenaza y una cartera de criptomonedas para pagar',
       si: ids => ids.has('body-crypto')
-        && (ids.has('from-tld') || ids.has('spf-neutral') || ids.has('dmarc-absent') || ids.has('dmarc-none')) }
+        && (ids.has('from-tld') || ids.has('spf-neutral') || ids.has('dmarc-none') || ids.has('subj-urgency')) }
   ];
 
-  const TECHO_COMBOS = 20;
+  const TECHO_COMBOS = 22;
 
   // Umbrales del veredicto
   const UMBRALES = [[80, 'CRITICO'], [50, 'ALTO'], [20, 'MEDIO'], [0, 'BAJO']];
@@ -1067,17 +1093,27 @@
     // que dicen los corpus: SpamAssassin puntua SPF_FAIL con 0.001 sobre 5.
     const S = (v) => (v || '').toLowerCase();
 
-    if (S(auth.spf) === 'fail') push('spf-fail', 'SPF fail: el servidor emisor no está autorizado por el dominio del sobre');
-    else if (S(auth.spf) === 'softfail') push('spf-softfail', 'SPF softfail');
-    else if (S(auth.spf) === 'none' || S(auth.spf) === 'neutral') push('spf-neutral', 'SPF ' + auth.spf + ': el dominio no publica política utilizable');
+    // ARC (RFC 8617) primero: si la cadena valida, los fallos de SPF y DKIM
+    // son del reenvio, no del autor, y no cuentan. Medido: solo el 2,8% del
+    // phishing real trae ARC valido y fallo de autenticacion a la vez, asi que
+    // esto cuesta poca deteccion y arregla del todo el correo de listas.
+    const arcOk = auth.arcChain > 0 && ['pass', 'none', null, ''].indexOf(S(auth.arc)) >= 0;
+    // DMARC es la conclusion de SPF y DKIM (RFC 7489). Si hay veredicto DMARC,
+    // el fallo ya esta contado ahi y sumar los insumos es contarlo tres veces.
+    const hayDmarc = ['pass', 'fail', 'none'].indexOf(S(auth.dmarc)) >= 0;
+    const sueltos = !hayDmarc && !arcOk;
+
+    if (S(auth.spf) === 'fail') { if (sueltos) push('spf-fail', 'SPF fail: el servidor emisor no está autorizado por el dominio del sobre'); }
+    else if (S(auth.spf) === 'softfail') { if (sueltos) push('spf-softfail', 'SPF softfail'); }
+    else if (S(auth.spf) === 'none' || S(auth.spf) === 'neutral') { if (!arcOk) push('spf-neutral', 'SPF ' + auth.spf + ': el dominio no publica política utilizable'); }
     else if (S(auth.spf) === 'pass') push('ok-spf', 'SPF pass: el servidor emisor está autorizado');
     else if (!noTransport) push('spf-absent', 'Sin resultado SPF en las cabeceras');
 
-    if (S(auth.dkim) === 'fail') push('dkim-fail', 'DKIM fail: la firma no valida (contenido alterado o firma falsa)');
+    if (S(auth.dkim) === 'fail') { if (sueltos) push('dkim-fail', 'DKIM fail: la firma no valida (contenido alterado o firma falsa)'); }
     else if (S(auth.dkim) === 'pass') push('ok-dkim', 'DKIM pass: la firma del dominio valida');
     else if (!noTransport) push('dkim-absent', 'El mensaje no viene firmado con DKIM');
 
-    if (S(auth.dmarc) === 'fail') push('dmarc-fail', 'DMARC fail: no hay alineamiento con el dominio del From');
+    if (S(auth.dmarc) === 'fail') { if (!arcOk) push('dmarc-fail', 'DMARC fail: no hay alineamiento con el dominio del From'); }
     else if (S(auth.dmarc) === 'none') push('dmarc-none', 'DMARC none: el dominio no publica política DMARC');
     else if (S(auth.dmarc) === 'pass') push('ok-dmarc', 'DMARC pass: el correo viene de donde dice venir');
     else if (!noTransport) push('dmarc-absent', 'Sin resultado DMARC en las cabeceras');
@@ -1090,7 +1126,6 @@
     // DMARC fail con ARC valido es la firma del REENVIO LEGITIMO -causa numero
     // uno de que el correo bueno falle DMARC-, no la de un fraude. Se parseaba
     // desde el principio y no se usaba para nada.
-    const arcOk = auth.arcChain > 0 && ['pass', 'none', null, ''].indexOf(S(auth.arc)) >= 0;
     if (arcOk) push('ok-arc', 'Cadena ARC presente (' + auth.arcChain + ' sello(s)): el correo ha pasado por un reenviador que da fe de que autenticaba en origen');
 
     // Alineamiento manual. Solo cuenta si NO hubo veredicto DMARC: si lo hubo,
@@ -1144,7 +1179,19 @@
       if (FREEMAIL.has(fromOrg) && CARGOS.test(dn)) {
         push('from-freemail-cargo', 'Se presenta como "' + dn.trim() + '" pero escribe desde una cuenta de correo gratuita');
       }
-      if (from.length > 1) push('from-multi', 'Múltiples direcciones en From (' + from.length + '): técnica de evasión');
+      if (from.length > 1) {
+        const conDireccion = from.filter(a => a.address && a.address.indexOf('@') > 0);
+        if (conDireccion.length > 1) {
+          push('from-multi', 'Múltiples direcciones en From (' + conDireccion.length + '): técnica de evasión');
+        } else {
+          push('from-malformed', 'El From lleva una coma sin comillas ("' + (from[0].raw || '').slice(0, 40) +
+            '"): parte la cabecera en dos y tu programa de correo enseña una cosa distinta de la que lee el filtro');
+        }
+      }
+      const parecido = dominioParecido(fromOrg);
+      if (parecido) {
+        push('from-lookalike', 'El dominio ' + fromOrg + ' imita a "' + parecido + '" cambiando o quitando letras');
+      }
     } else {
       push('from-missing', 'Sin cabecera From');
     }

@@ -153,6 +153,8 @@
     'att-mismatch': 'Un archivo dice ser una cosa y por dentro es otra.',
     'att-rtlo': 'El nombre de un archivo usa un truco para verse del revés.',
     'dn-mixed-script': 'El nombre de quien escribe mezcla letras de otro alfabeto que se ven igual que las nuestras.',
+    'from-malformed': 'La dirección de quien escribe está trucada para que tu programa de correo enseñe una cosa y el filtro lea otra.',
+    'from-lookalike': 'Escribe desde una web que imita el nombre de una conocida, con alguna letra cambiada.',
     'dmarc-none': 'El dominio desde el que escriben no ha configurado la protección que evita que le suplanten.',
     'spf-softfail': 'El servidor que lo ha enviado no es del todo el que debería.',
     'spf-neutral': 'El dominio desde el que escriben no dice quién puede enviar en su nombre.',
