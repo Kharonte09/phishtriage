@@ -1,68 +1,120 @@
 # PhishTriage
 
-**v1.0** · cifras medidas el 29 de agosto de 2026 contra esta misma etiqueta. ![tests](https://github.com/Kharonte09/phishtriage/actions/workflows/ci.yml/badge.svg)
+Le sueltas un correo sospechoso y te dice si parece un fraude, por qué, y qué
+hacer.
 
-Le sueltas un correo sospechoso y te dice si es un fraude, por qué, y qué hacer.
 **→ https://kharonte09.github.io/phishtriage/**
+
+![tests](https://github.com/Kharonte09/phishtriage/actions/workflows/ci.yml/badge.svg)
 
 ## Cómo se usa
 
-Suelta el correo en la página (o pégalo con `Ctrl+V`) y lee la pestaña **¿Qué
-hago?**. Lo descargas en Gmail con `⋮` → Descargar mensaje y en Thunderbird con
-clic derecho → Guardar como; un `.msg` de Outlook no vale. No hay servidor ni
-base de datos: el programa se ejecuta en tu pestaña, y el HTML del correo se
-muestra como texto y nunca se ejecuta, así que no avisa al atacante.
+Suelta el fichero del correo en la página, o pega el mensaje entero con
+`Ctrl+V`, y lee la pestaña **¿Qué hago?**. El resto de pestañas traen el detalle
+técnico.
+
+Para conseguir el fichero: en Gmail, `⋮` → *Descargar mensaje*; en Thunderbird,
+clic derecho → *Guardar como*; en Outlook de escritorio, arrastrando el correo
+al escritorio. Un `.msg` de Outlook no sirve, porque es un contenedor y no un
+correo: la herramienta lo detecta y lo dice en vez de analizarlo mal.
+
+No hay servidor ni base de datos. El análisis ocurre en la pestaña del
+navegador, y el HTML del correo se muestra como código y nunca se ejecuta, así
+que no se cargan imágenes remotas ni se avisa al remitente de que lo has abierto.
 
 ## Qué mira
 
-Las cinco preguntas de un analista, cada una con su techo de puntos para que
-ninguna pega dispare la nota sola: autenticación SPF/DKIM/DMARC (30), quién
-escribe de verdad (20), enlaces (20), texto (15), adjuntos (10), transporte (5)
-y combinaciones de fraude conocido (+22). BAJO menos de 18 · MEDIO 18-49 · ALTO
-50-79 · CRÍTICO 80 o más. Un correo no es sospechoso por venir de Gmail, ni por
-pedir una transferencia, ni por traer un IBAN, sino por las tres cosas a la vez.
+Seis bloques de comprobaciones, cada uno con un techo de puntos para que ningún
+tipo de indicio dispare la nota por sí solo:
 
-## De dónde salen los números
+| Bloque | Techo |
+|---|---|
+| Autenticación (SPF, DKIM, DMARC, ARC) | 30 |
+| Identidad del remitente | 20 |
+| Enlaces | 20 |
+| Contenido del mensaje | 15 |
+| Adjuntos | 10 |
+| Transporte y cabeceras | 5 |
+| Combinaciones que encajan con un fraude conocido | +22 |
 
-Los pesos no están puestos a ojo: salen de medir cuántas veces dispara cada
-indicio en phishing real y cuántas en correo legítimo, y el que no distingue no
-está en el código — así se cayeron 32. Medido sobre 9.916 correos de phishing
-([Phishing Pot](https://github.com/rf-peixoto/phishing_pot) y
-[Nazario](https://monkey.org/~jose/phishing/), 2023-25) y 7.621 legítimos:
-detecta entre el 51,6% y el 68,2% del phishing masivo según el buzón que lo
-recibió, con menos del 0,5% de falsos positivos. Dos límites:
+La nota resultante se traduce en cuatro niveles: BAJO por debajo de 18, MEDIO
+de 18 a 49, ALTO de 50 a 79 y CRÍTICO a partir de 80.
 
-- El correo legítimo medido es de 2002-2003 ([corpus de
-  SpamAssassin](https://spamassassin.apache.org/old/publiccorpus/)) y de [listas
-  técnicas](https://lists.apache.org/). **No incluye correo comercial moderno**,
-  que es donde están casi todos los falsos positivos reales.
-- Los dos corpus de phishing son de honeypot, así que miden **phishing masivo**.
-  El dirigido —spear-phishing, BEC, cuentas comprometidas— no llega a una trampa.
+Los indicios se suman, no se disparan por separado. Un correo no es sospechoso
+por venir de Gmail, ni por pedir una transferencia, ni por traer un IBAN, sino
+por las tres cosas a la vez.
 
-## Qué NO hace
+## De dónde salen los pesos
 
-No detecta cuentas comprometidas: si el atacante entra en el correo real de tu
-proveedor, todo autentica porque el correo *es* auténtico. No abre los adjuntos
-ni sigue los enlaces, y es orientativo: ante la duda entra tú a la web oficial
-escribiendo la dirección a mano y llama al teléfono de siempre. Si ya metiste la
-contraseña, cámbiala desde otra pestaña, activa la verificación en dos pasos y
-llama al **017**, que es INCIBE y es gratis.
+Cada regla lleva en el código un campo `fuente` que dice de dónde viene su peso.
+Hay dos casos:
 
-## Cómo está hecho
+- **Medido.** Se cuenta cuántas veces dispara la regla sobre un corpus de
+  phishing y cuántas sobre uno de correo legítimo, y se usa la razón entre
+  ambas frecuencias (*likelihood ratio*) para fijar los puntos. Una regla que
+  aparece con la misma frecuencia en los dos lados no distingue nada, por muy
+  grave que suene.
+- **Sin validar.** Reglas que no llegan a dispararse en los corpus disponibles,
+  o que no tienen suficientes casos para medirlas. Sus puntos están puestos por
+  criterio y el campo `fuente` lo dice explícitamente.
 
-Cuatro ficheros y ninguna dependencia: `index.html`, `assets/parser.js` (motor),
-`assets/ui.js` y `assets/styles.css`. Sírvelo por HTTP y no con `file://`: los
-hashes SHA usan WebCrypto, que solo funciona en contexto seguro.
+Hay una tercera etiqueta, **pocos casos**, para las reglas que sí aparecen en
+los corpus pero en un puñado de correos: ahí la razón entre frecuencias es ruido,
+así que se anota el recuento crudo y el peso queda puesto por criterio.
+
+Una regla anotada como *no distingue* tiene el peso a cero: sigue apareciendo en
+el informe como observación, pero no suma. Hay una prueba que lo comprueba.
+
+El resultado depende del corpus que uses, y no todas las reglas se pueden medir
+igual de bien. Las de autenticación son el caso claro: contra un corpus de correo
+legítimo anterior a DMARC o a ARC, la comparación no dice nada útil, porque esas
+cabeceras todavía no existían. Lo mismo pasa con `compauth`, que solo lo emite
+Microsoft y por tanto depende de quién recibiera el correo. Esas anotaciones lo
+avisan en el propio campo `fuente`.
+
+Los corpus no están en el repositorio. `tools/corpus.mjs` es la herramienta que
+hace la medición sobre los corpus que tengas tú:
 
 ```bash
-python3 -m http.server 8000                                 # http://127.0.0.1:8000
-node tests/test.mjs                                         # 71 pruebas
-node tools/corpus.mjs <carpeta> --esperado phishing|legitimo
+node tools/corpus.mjs <carpeta> --esperado phishing|legitimo   # reparto de notas y fallos
+node tools/corpus.mjs <carpeta-phishing> <carpeta-legitimo>    # razón de verosimilitud por regla
 ```
 
-Los correos de prueba son sintéticos; para saber si acierta hace falta correo
-real, y eso lo mide `tools/corpus.mjs`. Cada regla lleva un campo `fuente` con
-sus porcentajes medidos, y un test falla si alguien añade una sin declararlo.
+Acepta ficheros `.eml` sueltos y buzones `mbox`. No abre ningún adjunto ni sigue
+ningún enlace: el motor solo lee bytes.
+
+## Qué no hace
+
+No detecta cuentas comprometidas: si un atacante entra en el buzón real de tu
+proveedor, el correo autentica correctamente porque *es* auténtico.
+
+No abre los adjuntos ni visita los enlaces, así que no sabe qué hay al otro
+lado. Y es orientativo, no un veredicto: ante la duda, entra tú a la web oficial
+escribiendo la dirección a mano y llama al teléfono de siempre.
+
+Si ya has escrito la contraseña, cámbiala desde otra pestaña, activa la
+verificación en dos pasos y llama al **017**, que es el teléfono de INCIBE y es
+gratuito.
+
+## Cómo está montado
+
+Cuatro ficheros y ninguna dependencia: `index.html`, `assets/parser.js` (el
+motor), `assets/ui.js` (la interfaz) y `assets/styles.css`.
+
+Sírvelo por HTTP y no con `file://`: los hashes SHA se calculan con WebCrypto,
+que solo funciona en contexto seguro.
+
+```bash
+python3 -m http.server 8000     # http://127.0.0.1:8000
+node tests/test.mjs             # pruebas del motor
+npm i jsdom && node tests/test.mjs   # pruebas del motor y de la interfaz
+```
+
+Los correos de las pruebas son sintéticos: sirven para comprobar que el motor
+hace lo que dice, no para estimar cuánto acierta. Eso último requiere correo
+real y lo mide `tools/corpus.mjs`.
+
+## Licencia
 
 [MIT](LICENSE): úsalo, cópialo y modifícalo, también en proyectos comerciales;
 solo se pide mantener el aviso de autoría. Va sin garantías.

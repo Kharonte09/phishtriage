@@ -61,7 +61,7 @@
 
   function show(r) {
     $('#result').hidden = false;
-    ['#btnReset'].forEach(s => $(s).disabled = false);
+    $('#btnReset').disabled = false;
 
     const [titulo, lede] = TITULARES[r.verdict];
     $('#verdictBox').className = 'verdict r-' + r.verdict;
@@ -410,7 +410,7 @@
       (recursos.length
         ? '<details class="card"><summary style="cursor:pointer">Recursos que carga el correo solo: ' +
           'imágenes, iconos y fuentes <span class="muted">(' + recursos.length + ' destinos)</span></summary>' +
-          '</details>' + recursos.map(pinta).join('')
+          recursos.map(pinta).join('') + '</details>'
         : '');
     const b = $('#copyUrls');
     if (b) b.onclick = () => copy(r.urls.map(u => u.defanged).join('\n'), b);
@@ -474,16 +474,20 @@
   document.addEventListener('paste', async e => {
     const txt = (e.clipboardData || window.clipboardData).getData('text');
     if (!txt || txt.length < 40 || !/^[\w-]+\s*:/m.test(txt)) return;
-    const report = await PT.analyze(txt, { filename: 'portapapeles.eml' });
-    batch = [{ name: 'portapapeles.eml', report }];
-    renderBatchList();
-    show(report);
+    try {
+      const report = await PT.analyze(txt, { filename: 'portapapeles.eml' });
+      batch = [{ name: 'portapapeles.eml', report }];
+      renderBatchList();
+      show(report);
+    } catch (err) {
+      alert(err.formatoNoSoportado ? err.message : 'No se pudo analizar lo pegado: ' + err.message);
+    }
   });
 
   $('#btnReset').onclick = () => {
     batch = [];
     $('#result').hidden = true; $('#multi').hidden = true; $('#file').value = '';
-    ['#btnReset'].forEach(s => $(s).disabled = true);
+    $('#btnReset').disabled = true;
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 

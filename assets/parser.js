@@ -219,7 +219,7 @@
     const etiqueta = String(orgDomain).split('.')[0];
     if (!etiqueta || etiqueta.length < 4) return null;
     const norm = normalizaLeet(etiqueta);
-    const crudo = String(etiqueta).toLowerCase().replace(/[^a-z]/g, );
+    const crudo = String(etiqueta).toLowerCase().replace(/[^a-z]/g, '');
     if (!norm) return null;
     for (const marca of BRANDS) {
       if (marca.length < 4) continue;
@@ -480,11 +480,6 @@
 
   const SHORTENERS = new Set('bit.ly tinyurl.com t.co goo.gl ow.ly is.gd buff.ly cutt.ly rb.gy shorturl.at rebrand.ly tiny.cc lnkd.in bl.ink t.ly shorte.st adf.ly v.gd trib.al mcaf.ee urlz.fr x.gd clck.ru'.split(' '));
 
-  const REDIRECT_HOSTS = [/^clicktime\./i, /safelinks\.protection\.outlook\.com$/i, /urldefense\./i,
-    /\.proofpoint\.com$/i, /\.mimecastprotect\.com$/i, /^r\./i, /^click\./i, /^link\./i, /^email\./i, /\.sendgrid\.net$/i];
-
-  const CRED_WORDS = /(login|log-in|signin|sign-in|verify|verification|secure|account|update|confirm|password|passwd|credential|billing|invoice|payment|unlock|suspend|recover|auth|sso|mfa|otp|token|wallet|seed|kyc)/i;
-
   const RISKY_TLD = new Set('zip mov xyz top tk ml ga cf gq work click link country stream download loan review kim men date racing win bid quest cam rest buzz monster sbs cfd icu shop live fit'.split(' '));
 
   const BRANDS = 'microsoft office365 outlook onedrive sharepoint apple icloud google gmail amazon aws paypal netflix facebook instagram whatsapp linkedin dropbox docusign adobe santander bbva caixabank sabadell bankinter unicaja ing correos seur dhl fedex ups dgt aeat agenciatributaria seguridadsocial endesa iberdrola movistar vodafone binance coinbase metamask revolut wetransfer zoom teams chase hsbc'.split(' ');
@@ -493,8 +488,6 @@
 
   const CARGOS = /\b(ceo|cfo|coo|cto|director|directora|direccion|dirección|gerente|presidente|presidenta|administrador|administradora|jefe|jefa|responsable|manager|head of)\b/i;
 
-  const FILEHOSTS = new Set('drive.google.com docs.google.com dropbox.com wetransfer.com we.tl onedrive.live.com 1drv.ms mega.nz mediafire.com box.com sharefile.com sync.com pcloud.com terabox.com'.split(' '));
-
   const IBAN_RE = /\b[A-Z]{2}\d{2}[ ]?(?:[A-Za-z0-9]{4}[ ]?){3,7}[A-Za-z0-9]{1,4}\b/;
 
   const URL_RE = /\b(?:https?|ftp|file):\/\/[^\s<>"'`)\]}]+|\bwww\.[a-z0-9-]+(?:\.[a-z0-9-]+)+[^\s<>"'`)\]}]*/gi;
@@ -502,6 +495,11 @@
   function parseUrl(u) {
     let s = String(u).trim().replace(/[)>\]}.,;:'"]+$/, '');
     if (/^www\./i.test(s)) s = 'http://' + s;
+    const dm = s.match(/^data:([^,]*),/i);
+    if (dm) {
+      const tipoMedio = dm[1].toLowerCase();
+      return { url: 'data:' + tipoMedio.slice(0, 60) + ',...', scheme: 'data', host: '', port: '', userinfo: '', path: tipoMedio };
+    }
     let scheme = '', authority = '', rest = '';
     const m = s.match(/^([a-z][a-z0-9+.-]*):\/\/([^/?#]*)([\s\S]*)$/i);
     if (m) { scheme = m[1].toLowerCase(); authority = m[2]; rest = m[3] || ''; }
@@ -560,6 +558,8 @@
     return Array.from(found.values()).map(entry => {
       const p = entry.parsed;
       const texts = Array.from(entry.texts);
+      const PINCHABLES = 'html:a html:form html:refresh text'.split(' ');
+      const tipo = Array.from(entry.sources).some(x => PINCHABLES.indexOf(x) >= 0) ? 'enlace' : 'recurso';
       const flags = [];
       const host = p.host;
       const od = orgDomain(host);
@@ -574,10 +574,8 @@
       if (SHORTENERS.has(od)) flags.push({ id: 'url-shortener', sev: 'medium', msg: 'Acortador de URL: destino oculto' });
       if (RISKY_TLD.has(tld)) flags.push({ id: 'url-tld', sev: 'medium', msg: 'TLD de alto abuso: .' + tld });
       if ((host.match(/\./g) || []).length >= 4) flags.push({ id: 'url-subdomains', sev: 'low', msg: 'Exceso de subdominios (' + host + ')' });
-      const tokens = host.split(/[.\-_]/).filter(Boolean);
-      const brandHit = BRANDS.find(b => tokens.includes(b) && !od.split('.')[0].startsWith(b));
-      if (/^data:/i.test(p.url)) flags.push({ id: 'url-data', sev: 'high', msg: 'data: URI (HTML embebido)' });
-      if (FILEHOSTS.has(host) || FILEHOSTS.has(od)) {
+      if (p.scheme === 'data' && tipo === 'enlace' && /html|svg|xml|script/.test(p.path)) {
+        flags.push({ id: 'url-data', sev: 'high', msg: 'El enlace lleva una pagina entera incrustada dentro del propio correo (data: URI)' });
       }
 
       for (const t of texts) {
@@ -592,9 +590,6 @@
       const DEBILES = 'url-tld url-subdomains url-hosting-gratis'.split(' ');
       const enCasa = propios.has(od);
       const flagsFinales = enCasa ? flags.filter(f => DEBILES.indexOf(f.id) < 0) : flags;
-
-      const PINCHABLES = 'html:a html:form html:refresh text'.split(' ');
-      const tipo = Array.from(entry.sources).some(x => PINCHABLES.indexOf(x) >= 0) ? 'enlace' : 'recurso';
 
       return {
         url: p.url, defanged: defang(p.url), scheme: p.scheme, host, orgDomain: od, propio: enCasa, tipo,
@@ -721,72 +716,72 @@
   };
 
   const PESOS = {
-    'dkim-fail':       { cat: 'auth', pts: 19, sev: 'high',  fuente: 'LR 41.5 (P 9.5% / H 0.0%)' },
-    'dmarc-fail':      { cat: 'auth', pts: 19, sev: 'high',  fuente: 'LR 39.0 (P 7.8% / H 0.0%)' },
-    'spf-fail':        { cat: 'auth', pts: 18, sev: 'high',  fuente: 'LR 32.8 (P 9.4% / H 0.1%)' },
-    'spf-softfail':    { cat: 'auth', pts: 16, sev: 'medium', fuente: 'LR 26.3 (P 5.2% / H 0.0%)' },
-    'spf-neutral':     { cat: 'auth', pts: 15, sev: 'medium', fuente: 'LR 18.9 (P 28.8% / H 1.3%)' },
-    'dmarc-none':      { cat: 'auth', pts: 13, sev: 'medium', fuente: 'LR 12.4 (P 43.9% / H 3.3%)' },
-    'compauth':        { cat: 'auth', pts: 12, sev: 'medium', fuente: 'a mano - veredicto de Microsoft, medida contaminada por el receptor' },
+    'dkim-fail':       { cat: 'auth', pts: 19, sev: 'high',  fuente: 'LR >100 (P 2.25% / H 0.01%)' },
+    'dmarc-fail':      { cat: 'auth', pts: 19, sev: 'high',  fuente: 'LR >100 (P 6.24% / H <0.01%)' },
+    'spf-fail':        { cat: 'auth', pts: 18, sev: 'high',  fuente: 'LR 45.4 (P 0.29% / H <0.01%)' },
+    'spf-softfail':    { cat: 'auth', pts: 16, sev: 'medium', fuente: 'LR 33.1 (P 0.21% / H <0.01%)' },
+    'spf-neutral':     { cat: 'auth', pts: 15, sev: 'medium', fuente: 'LR 79.6 (P 23.50% / H 0.29%)' },
+    'dmarc-none':      { cat: 'auth', pts: 13, sev: 'medium', fuente: 'LR 28.6 (P 43.75% / H 1.52%)' },
+    'compauth':        { cat: 'auth', pts: 12, sev: 'medium', fuente: 'LR >100 (P 20.99% / H <0.01%), solo lo emite Microsoft: la medida depende del receptor' },
 
-    'ok-arc':          { cat: 'auth', pts: -1, sev: 'info', fuente: 'a mano - reenvio legitimo; el 60% del phishing tambien lo activaba' },
-    'ok-dmarc':        { cat: 'auth', pts: -1, sev: 'info', fuente: 'a mano - el 24% del phishing real pasa DMARC' },
+    'ok-arc':          { cat: 'auth', pts: -1, sev: 'info', fuente: 'LR 6.9 (P 26.28% / H 3.79%), el corpus legitimo es anterior a ARC: la medida no es comparable' },
+    'ok-dmarc':        { cat: 'auth', pts: -1, sev: 'info', fuente: 'LR 63.6 (P 27.95% / H 0.43%), el corpus legitimo es anterior a DMARC: la medida no es comparable' },
 
-    'dn-suplanta-propio': { cat: 'identidad', pts: 20, sev: 'high', fuente: 'LR 99.2 (P 5.9% / H 0.00%), recortado al techo' },
-    'from-basura':     { cat: 'identidad', pts: 20, sev: 'high', fuente: 'LR 155.8 (P 6.1% / H 0.04%), recortado al techo' },
-    'from-malformed':  { cat: 'identidad', pts: 20, sev: 'high', fuente: 'LR 93.4 (P 18.6% / H 0.0%)' },
-    'from-tld':        { cat: 'identidad', pts: 13, sev: 'high', fuente: 'LR 13.3 (P 3.0% / H 0.0%)' },
-    'dn-oficial-freemail': { cat: 'identidad', pts: 8, sev: 'high', fuente: 'LR 5.0 (P 0.4% / H <0.1%, regla de tres)' },
-    'replyto-freemail':{ cat: 'identidad', pts: 6, sev: 'medium', fuente: 'LR 3.1 (P 0.6% / H 0.0%)' },
-    'dn-mixed-script': { cat: 'identidad', pts: 5, sev: 'medium', fuente: 'LR 2.6 (P 0.5% / H 0.0%)' },
-    'from-multi':      { cat: 'identidad', pts: 5, sev: 'medium', fuente: 'sin validar - varias direcciones reales en From' },
-    'from-punycode':   { cat: 'identidad', pts: 12, sev: 'high', fuente: 'sin validar (0% en ambos corpus) - preciso por construccion' },
-    'from-lookalike':  { cat: 'identidad', pts: 12, sev: 'high', fuente: 'sin validar - dominio que imita a una marca' },
+    'dn-suplanta-propio': { cat: 'identidad', pts: 20, sev: 'high', fuente: 'LR >100 (P 3.90% / H <0.01%)' },
+    'from-basura':     { cat: 'identidad', pts: 20, sev: 'high', fuente: 'LR >100 (P 10.97% / H 0.07%)' },
+    'from-malformed':  { cat: 'identidad', pts: 20, sev: 'high', fuente: 'LR >100 (P 14.30% / H <0.01%)' },
+    'from-tld':        { cat: 'identidad', pts: 13, sev: 'high', fuente: 'LR >100 (P 2.98% / H 0.01%)' },
+    'dn-oficial-freemail': { cat: 'identidad', pts: 0, sev: 'high', fuente: 'LR 0.7 (P 0.63% / H 0.96%) - no distingue, no puntua' },
+    'replyto-freemail':{ cat: 'identidad', pts: 6, sev: 'medium', fuente: 'LR 85.3 (P 0.55% / H <0.01%)' },
+    'dn-mixed-script': { cat: 'identidad', pts: 5, sev: 'medium', fuente: 'LR >100 (P 0.68% / H <0.01%)' },
+    'from-multi':      { cat: 'identidad', pts: 5, sev: 'medium', fuente: 'LR >100 (P 1.88% / H <0.01%)' },
+    'from-punycode':   { cat: 'identidad', pts: 12, sev: 'high', fuente: 'pocos casos (P 1/9915, H 0/7621) - peso por construccion' },
+    'from-lookalike':  { cat: 'identidad', pts: 12, sev: 'high', fuente: 'LR >100 (P 5.30% / H 0.04%)' },
     'from-freemail-cargo': { cat: 'identidad', pts: 8, sev: 'high', fuente: 'sin validar - patron BEC (FBI IC3)' },
 
-    'url-tld':         { cat: 'enlaces', pts: 17, sev: 'high', fuente: 'LR 30.6 (P 6.1% / H 0.0%)' },
-    'url-hosting-gratis': { cat: 'enlaces', pts: 7, sev: 'medium', fuente: 'LR 4.2 (P 8.4% / H 2.03%)' },
-    'url-userinfo':    { cat: 'enlaces', pts: 10, sev: 'high', fuente: 'LR 7.9 (P 1.6% / H 0.0%)' },
-    'url-shortener':   { cat: 'enlaces', pts: 10, sev: 'medium', fuente: 'LR 7.4 (P 13.3% / H 1.6%)' },
-    'url-ip':          { cat: 'enlaces', pts: 6, sev: 'medium', fuente: 'LR 3.3 (P 5.9% / H 1.6%)' },
-    'url-subdomains':  { cat: 'enlaces', pts: 5, sev: 'low', fuente: 'LR 2.7 (P 4.9% / H 1.6%)' },
+    'url-tld':         { cat: 'enlaces', pts: 17, sev: 'high', fuente: 'LR >100 (P 5.95% / H 0.04%)' },
+    'url-hosting-gratis': { cat: 'enlaces', pts: 7, sev: 'medium', fuente: 'LR 4.4 (P 8.25% / H 1.86%)' },
+    'url-userinfo':    { cat: 'enlaces', pts: 10, sev: 'high', fuente: 'LR 72.0 (P 1.41% / H 0.01%)' },
+    'url-shortener':   { cat: 'enlaces', pts: 10, sev: 'medium', fuente: 'LR >100 (P 12.52% / H 0.07%)' },
+    'url-ip':          { cat: 'enlaces', pts: 6, sev: 'medium', fuente: 'LR 22.5 (P 5.16% / H 0.22%)' },
+    'url-subdomains':  { cat: 'enlaces', pts: 5, sev: 'low', fuente: 'LR 6.0 (P 4.62% / H 0.76%)' },
     'url-rtlo':        { cat: 'enlaces', pts: 15, sev: 'high', fuente: 'sin validar (0% en ambos) - preciso por construccion' },
-    'url-zerowidth':   { cat: 'enlaces', pts: 15, sev: 'high', fuente: 'sin validar (0% en ambos) - preciso por construccion' },
-    'url-punycode':    { cat: 'enlaces', pts: 14, sev: 'high', fuente: 'sin validar (0% en ambos) - preciso por construccion' },
+    'url-zerowidth':   { cat: 'enlaces', pts: 15, sev: 'high', fuente: 'pocos casos (P 1/9915, H 0/7621) - peso por construccion' },
+    'url-punycode':    { cat: 'enlaces', pts: 14, sev: 'high', fuente: 'pocos casos (P 2/9915, H 0/7621) - peso por construccion' },
     'url-multi-at':    { cat: 'enlaces', pts: 12, sev: 'high', fuente: 'sin validar - preciso por construccion' },
     'url-data':        { cat: 'enlaces', pts: 10, sev: 'high', fuente: 'sin validar - preciso por construccion' },
-    'url-mismatch':    { cat: 'enlaces', pts: 3, sev: 'low', fuente: 'LR 1.0 (P 3.5% / H 3.2%) - apenas distingue' },
+    'url-mismatch':    { cat: 'enlaces', pts: 3, sev: 'low', fuente: 'LR 17.8 (P 3.39% / H 0.18%)' },
 
-    'body-image':      { cat: 'contenido', pts: 15, sev: 'high', fuente: 'LR 29.3 (P 5.8% / H 0.0%), recortado al techo' },
-    'subj-urgency':    { cat: 'contenido', pts: 14, sev: 'medium', fuente: 'LR 15.5 (P 5.7% / H 0.2%)' },
-    'body-buzon':      { cat: 'contenido', pts: 15, sev: 'high', fuente: 'LR 81.9 (P 5.4% / H 0.07%), recortado al techo' },
-    'subj-premio':     { cat: 'contenido', pts: 12, sev: 'medium', fuente: 'LR 11.2 (P 4.4% / H 0.4%) - medido solo en ingles' },
-    'body-crypto':     { cat: 'contenido', pts: 10, sev: 'medium', fuente: 'LR 7.7 (P 13.9% / H 1.6%)' },
-    'body-callback':   { cat: 'contenido', pts: 6, sev: 'medium', fuente: 'LR 3.1 (P 0.6% / H 0.0%)' },
-    'body-bec':        { cat: 'contenido', pts: 4, sev: 'medium', fuente: 'LR 2.2 (P 3.9% / H 1.6%)' },
-    'body-hidden':     { cat: 'contenido', pts: 5, sev: 'low', fuente: 'LR 2.5 (P 37.5% / H 14.8%)' },
+    'body-image':      { cat: 'contenido', pts: 15, sev: 'high', fuente: 'LR >100 (P 5.16% / H <0.01%)' },
+    'subj-urgency':    { cat: 'contenido', pts: 14, sev: 'medium', fuente: 'LR 47.1 (P 7.10% / H 0.14%)' },
+    'body-buzon':      { cat: 'contenido', pts: 15, sev: 'high', fuente: 'LR 75.7 (P 5.46% / H 0.07%)' },
+    'subj-premio':     { cat: 'contenido', pts: 12, sev: 'medium', fuente: 'LR >100 (P 9.84% / H 0.08%)' },
+    'body-crypto':     { cat: 'contenido', pts: 10, sev: 'medium', fuente: 'LR 51.4 (P 12.47% / H 0.24%)' },
+    'body-callback':   { cat: 'contenido', pts: 6, sev: 'medium', fuente: 'LR >100 (P 0.68% / H <0.01%)' },
+    'body-bec':        { cat: 'contenido', pts: 4, sev: 'medium', fuente: 'LR 12.0 (P 3.54% / H 0.29%)' },
+    'body-hidden':     { cat: 'contenido', pts: 5, sev: 'low', fuente: 'LR 64.5 (P 32.58% / H 0.50%)' },
     'body-password':   { cat: 'contenido', pts: 12, sev: 'high', fuente: 'sin validar - preciso por construccion' },
-    'body-iban':       { cat: 'contenido', pts: 8, sev: 'medium', fuente: 'sin validar - patron BEC' },
-    'body-nocontacto': { cat: 'contenido', pts: 8, sev: 'medium', fuente: 'sin validar - patron BEC' },
+    'body-iban':       { cat: 'contenido', pts: 8, sev: 'medium', fuente: 'pocos casos (P 3/9915, H 0/7621) - peso por construccion' },
+    'body-nocontacto': { cat: 'contenido', pts: 8, sev: 'medium', fuente: 'pocos casos (P 4/9915, H 0/7621) - peso por construccion' },
     'body-refresh':    { cat: 'contenido', pts: 6, sev: 'medium', fuente: 'sin validar' },
     'body-empty':      { cat: 'contenido', pts: 0, sev: 'info', fuente: 'LR 0.4 - no distingue' },
 
-    'att-exec':        { cat: 'adjuntos', pts: 10, sev: 'high', fuente: 'sin validar (0% en el corpus)' },
-    'att-archive-nested': { cat: 'adjuntos', pts: 10, sev: 'high', fuente: 'sin validar (0% en el corpus)' },
+    'att-exec':        { cat: 'adjuntos', pts: 10, sev: 'high', fuente: 'pocos casos (P 0/9915, H 1/7621) - peso por construccion' },
+    'att-archive-nested': { cat: 'adjuntos', pts: 10, sev: 'high', fuente: 'pocos casos (P 3/9915, H 0/7621) - peso por construccion' },
     'att-macro':       { cat: 'adjuntos', pts: 10, sev: 'high', fuente: 'sin validar (0% en el corpus)' },
     'att-encrypted':   { cat: 'adjuntos', pts: 9, sev: 'high', fuente: 'sin validar (0% en el corpus)' },
     'att-rtlo':        { cat: 'adjuntos', pts: 9, sev: 'high', fuente: 'sin validar (0% en el corpus)' },
-    'att-double':      { cat: 'adjuntos', pts: 8, sev: 'high', fuente: 'sin validar (0% en el corpus)' },
+    'att-double':      { cat: 'adjuntos', pts: 8, sev: 'high', fuente: 'pocos casos (P 10/9915, H 0/7621) - peso por construccion' },
     'att-mismatch':    { cat: 'adjuntos', pts: 8, sev: 'high', fuente: 'sin validar (0% en el corpus)' },
-    'att-senuelo':     { cat: 'adjuntos', pts: 10, sev: 'high', fuente: 'LR 17.4 (P 1.4% / H <0.1%, regla de tres), recortado al techo' },
-    'att-html':        { cat: 'adjuntos', pts: 6, sev: 'medium', fuente: 'LR 0.6 (P 0.1% / H 0.0%) - pocos datos' },
+    'att-senuelo':     { cat: 'adjuntos', pts: 10, sev: 'high', fuente: 'LR 19.0 (P 1.61% / H 0.08%)' },
+    'att-html':        { cat: 'adjuntos', pts: 6, sev: 'medium', fuente: 'LR 39.2 (P 0.77% / H 0.01%)' },
     'att-ole':         { cat: 'adjuntos', pts: 4, sev: 'medium', fuente: 'sin validar' },
 
-    'xmailer':         { cat: 'transporte', pts: 5, sev: 'medium', fuente: 'LR 17.4 (P 3.5% / H 0.0%), recortado por el techo' },
-    'date-skew':       { cat: 'transporte', pts: 3, sev: 'low', fuente: 'LR 1.9 (P 1.2% / H 0.4%)' },
+    'xmailer':         { cat: 'transporte', pts: 5, sev: 'medium', fuente: 'LR >100 (P 3.06% / H <0.01%)' },
+    'date-skew':       { cat: 'transporte', pts: 3, sev: 'low', fuente: 'LR 8.6 (P 1.18% / H 0.13%)' },
     'mime-profundo':   { cat: 'adjuntos', pts: 8, sev: 'high', fuente: 'sin validar (0% en los tres corpus) - evasion por construccion' },
     'rcv-none':        { cat: 'transporte', pts: 3, sev: 'low', fuente: 'sin validar' },
-    'date-missing':    { cat: 'transporte', pts: 2, sev: 'low', fuente: 'sin validar' },
+    'date-missing':    { cat: 'transporte', pts: 2, sev: 'low', fuente: 'LR 93.0 (P 0.61% / H <0.01%)' },
   };
 
   const COMBOS = [
@@ -817,7 +812,7 @@
   const LLAMADA = /(llam[ae]|ll[áa]menos|call us|call now|contact us at|para cancelar|to cancel|customer (care|service|support)|atenci[óo]n al cliente|soporte t[ée]cnico|help ?desk)/i;
   const COBRO = /(subscription|suscripci[óo]n|renewal|renovaci[óo]n|invoice|factura|order|pedido|charge|cargo|payment|pago|purchase|compra|receipt|recibo)/i;
 
-  const URGENCY = /(urgente|inmediat|caduca|expira|vence|suspend|bloquea|bloqueo|último aviso|último aviso|accion requerida|acción requerida|24 horas|48 horas|impag|multa|sanción|sanción|premio|herencia|urgent|immediate|expires?|suspended|action required|final notice|overdue|last warning)/i;
+  const URGENCY = /(urgente|inmediat|caduca|expira|vence|suspend|bloquea|bloqueo|último aviso|accion requerida|acción requerida|24 horas|48 horas|impag|multa|sanción|premio|herencia|urgent|immediate|expires?|suspended|action required|final notice|overdue|last warning)/i;
 
   const PREMIO = /(has? ganado|ha sido premiad|premio|loter[ií]a|sorteo|has? sido seleccionad|you (have )?won|you'?re a winner|winner|jackpot|free spins?|freispiele|cashback|airdrop|gewonnen|gewinn|vinto|vincita|claim your (prize|bonus|reward)|reclama tu|congratulations[!,. ]|felicidades|prize|lottery|sweepstakes?|bonus (von|sichern))/i;
 
@@ -994,7 +989,6 @@
 
     // --- Por donde ha pasado -------------------------------------------------
     if (hops.length === 0) { if (!noTransport) push('rcv-none', 'Sin cabeceras Received: mensaje inyectado localmente o cabeceras eliminadas'); }
-    const bigDelay = hops.find(h => h.delaySeconds !== null && h.delaySeconds > 3600);
     if (!dateHdr && !noTransport) push('date-missing', 'Sin cabecera Date');
     if (dateHdr && hops.length) {
       const first = hops.find(h => h.ts);
@@ -1113,7 +1107,7 @@
       'message-id', 'in-reply-to', 'references', 'x-mailer', 'user-agent', 'x-originating-ip',
       'authentication-results', 'received-spf', 'dkim-signature', 'arc-authentication-results',
       'x-forefront-antispam-report', 'x-microsoft-antispam', 'x-spam-status', 'x-spam-score',
-      'list-unsubscribe', 'content-type', 'mime-versión', 'x-priority', 'importance', 'sender',
+      'list-unsubscribe', 'content-type', 'mime-version', 'x-priority', 'importance', 'sender',
       'x-sender', 'x-original-from', 'x-authenticated-sender', 'x-php-originating-script'];
 
     return {

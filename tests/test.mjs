@@ -332,9 +332,13 @@ const sinMedir = conFuente.filter(r => r.pts > 0 && !/^LR /.test(r.fuente));
 check('la mayoria de los pesos sale de una medida, no de mi criterio',
   medidas.length >= conFuente.length / 2,
   medidas.length + ' medidas de ' + conFuente.length);
-check('y las que no estan medidas lo dicen',
-  sinMedir.every(r => /sin validar|a mano/.test(r.fuente)),
-  sinMedir.filter(r => !/sin validar|a mano/.test(r.fuente)).map(r => r.id).join());
+const DECLARADO = /sin validar|a mano|pocos casos/;
+check('y las que no estan medidas dicen por que',
+  sinMedir.every(r => DECLARADO.test(r.fuente)),
+  sinMedir.filter(r => !DECLARADO.test(r.fuente)).map(r => r.id).join());
+check('ninguna regla que no distingue puntua',
+  conFuente.every(r => !/no distingue/.test(r.fuente) || r.pts === 0),
+  conFuente.filter(r => /no distingue/.test(r.fuente) && r.pts !== 0).map(r => r.id).join());
 check('hay pesos negativos: sin mitigantes todo correo reenviado es sospechoso',
   conFuente.some(r => r.pts < 0));
 check('ninguna regla se pasa sola del techo de su categoria',
