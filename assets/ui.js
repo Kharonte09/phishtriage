@@ -1,4 +1,4 @@
-/* PhishTriage - interfaz: pinta lo que devuelve parser.js y gestiona los clics. */
+/* PhishTriage - interfaz: representa el informe de parser.js y gestiona la interacción. */
 (function () {
   'use strict';
 
@@ -24,6 +24,9 @@
 
   const SEVLABEL = { high: 'ALTO', medium: 'MEDIO', low: 'BAJO', info: 'INFO' };
 
+  const hallazgo = (sev, cuerpo) =>
+    '<div class="finding"><span class="sev sev-' + sev + '">' + SEVLABEL[sev] + '</span><span>' + cuerpo + '</span></div>';
+
   async function handleFiles(files) {
     batch = [];
     for (const f of files) {
@@ -34,7 +37,7 @@
         batch.push({ name: f.name, report });
       } catch (e) {
         console.error(e);
-        alert(e.formatoNoSoportado ? e.message : 'No se pudo analizar ' + f.name + ': ' + e.message);
+        alert(e.formatoNoSoportado ? e.message : 'No se ha podido analizar ' + f.name + ': ' + e.message);
       }
     }
     if (!batch.length) return;
@@ -98,93 +101,93 @@
     ).join('') + '</table>';
   }
 
-  const EN_CRISTIANO = {
-    'url-tld': 'Los enlaces llevan a webs del tipo que usan casi siempre las estafas.',
-    'replyto-freemail': 'Si respondes, tu respuesta se va a otra cuenta distinta.',
-    'from-freemail-cargo': 'Dice ser un jefe de una empresa, pero escribe desde un Gmail o parecido.',
-    'body-iban': 'Te da un número de cuenta para que ingreses el dinero ahí.',
-    'body-nocontacto': 'Te pide que no llames ni se lo cuentes a nadie, para que nadie pueda desmentirlo.',
-    'combo-bec': 'Se hace pasar por alguien de confianza para que pagues algo.',
-    'combo-credenciales': 'Es una página falsa montada para robarte la contraseña.',
-    'combo-malware': 'Trae un archivo peligroso y te mete prisa para que lo abras.',
-    'combo-extorsion': 'Te amenaza y te pide dinero en criptomonedas.',
-    'dmarc-fail': 'El correo no viene de donde dice venir.',
-    'spf-fail': 'Lo ha enviado un servidor que no es el de esa empresa.',
-    'dkim-fail': 'La firma del correo no cuadra: lo han manipulado o es falso.',
-    'from-punycode': 'La dirección usa letras raras que imitan a otra conocida.',
-    'from-tld': 'Escribe desde un tipo de web muy barata, típica de estafas.',
-    'subj-urgency': 'El asunto mete prisa o amenaza. Es el truco más viejo que hay.',
-    'body-password': 'Te pide la contraseña dentro del propio correo. Ningún banco hace eso.',
-    'body-refresh': 'Intenta llevarte solo a otra página en cuanto lo abres.',
-    'body-hidden': 'Lleva texto invisible para colarse en el filtro de spam.',
-    'body-image': 'Es casi todo una imagen, para que los filtros no puedan leerlo.',
-    'body-bec': 'Pide cambiar datos del banco o hacer un pago.',
-    'mime-profundo': 'El correo esconde sus partes unas dentro de otras muchas veces seguidas. Eso se hace para que los análisis no lleguen al fondo.',
-    'dn-suplanta-propio': 'Se hace pasar por tu propia empresa o tu proveedor de correo, pero escribe desde fuera. Tu informático no te escribe desde otro dominio.',
-    'from-basura': 'La dirección de quien escribe es un dominio inventado a máquina, del tipo que se registra a miles para una estafa y se tira.',
-    'body-buzon': 'Te dice que tu buzón se llena, que tu contraseña caduca o que tienes correo retenido. Es la excusa más usada del mundo para que escribas tu contraseña.',
-    'url-hosting-gratis': 'El enlace lleva a una página montada en alojamiento gratuito, no a la web de la empresa que dice ser.',
-    'subj-premio': 'Te anuncia un premio, un sorteo o un bono que tú no has pedido. Nadie regala nada por correo.',
-    'att-senuelo': 'Casi todo el mensaje está en el adjunto y no hay ni un enlace. Es la forma de que abras el fichero sin pensarlo.',
-    'dn-oficial-freemail': 'Firma como un departamento oficial o una marca, pero escribe desde un Gmail o parecido. Una empresa de verdad no hace eso.',
-    'body-crypto': 'Habla de criptomonedas. Típico de estafas de inversión o de chantaje.',
-    'body-callback': 'Te da un teléfono para cancelar un cobro que tú no has hecho. Si llamas, te sacan los datos por voz.',
-    'xmailer': 'Se ha mandado con una herramienta de envíos masivos, no desde un correo normal.',
-    'url-mismatch': 'Un enlace enseña una dirección pero lleva a otra distinta.',
-    'url-ip': 'Un enlace lleva a un número en vez de a una web con nombre.',
-    'url-punycode': 'Un enlace usa letras raras que imitan a una web conocida.',
-    'url-shortener': 'Hay enlaces acortados que esconden a dónde llevan de verdad.',
-    'url-userinfo': 'Un enlace está montado para aparentar un destino que no es el real.',
-    'att-exec': 'Trae un programa. Abrirlo instalaría algo en tu ordenador.',
-    'att-macro': 'Trae un Word o un Excel con macros, que pueden ejecutar programas.',
-    'att-html': 'Trae una página web como archivo. Truco habitual para robar contraseñas.',
-    'att-double': 'Un archivo tiene doble extensión para parecer un PDF o una foto.',
-    'att-mismatch': 'Un archivo dice ser una cosa y por dentro es otra.',
-    'att-rtlo': 'El nombre de un archivo usa un truco para verse del revés.',
-    'dn-mixed-script': 'El nombre de quien escribe mezcla letras de otro alfabeto que se ven igual que las nuestras.',
-    'from-malformed': 'La dirección de quien escribe está trucada para que tu programa de correo enseñe una cosa y el filtro lea otra.',
-    'from-lookalike': 'Escribe desde una web que imita el nombre de una conocida, con alguna letra cambiada.',
-    'dmarc-none': 'El dominio desde el que escriben no ha configurado la protección que evita que le suplanten.',
-    'spf-softfail': 'El servidor que lo ha enviado no es del todo el que debería.',
-    'spf-neutral': 'El dominio desde el que escriben no dice quién puede enviar en su nombre.',
-    'compauth': 'Los filtros de Microsoft no han podido confirmar que sea auténtico.',
-    'from-multi': 'El correo lleva varios remitentes a la vez. Es una forma de despistar a los filtros.',
-    'url-zerowidth': 'Un enlace lleva letras invisibles metidas dentro para disimular a dónde va.',
-    'url-rtlo': 'Un enlace usa un truco para que la dirección se lea al revés de como es.',
-    'url-data': 'Un enlace lleva una página entera metida dentro del propio correo.',
-    'url-multi-at': 'Un enlace enseña una dirección conocida al principio, pero el destino real es otro.',
-    'url-subdomains': 'Un enlace encadena tantos nombres que el de verdad queda escondido al final.',
-    'att-archive-nested': 'Trae un comprimido con otro dentro. Se hace para que el antivirus no pueda mirar.',
-    'att-encrypted': 'Trae un archivo con contraseña. Así ningún antivirus puede ver lo que lleva.',
-    'att-ole': 'Un archivo tiene por dentro un formato antiguo de Office que no le corresponde.',
-    'body-empty': 'No dice nada: solo trae el archivo adjunto.',
-    'rcv-none': 'No se ve por dónde ha pasado. O lo han metido a mano o le han borrado el rastro.',
+  const EXPLICACIONES = {
+    'url-tld': 'Los enlaces apuntan a dominios del tipo que emplean habitualmente los fraudes.',
+    'replyto-freemail': 'Si respondes, la respuesta se dirige a una cuenta distinta de la que envía.',
+    'from-freemail-cargo': 'Se presenta como responsable de una empresa, pero escribe desde una cuenta gratuita.',
+    'body-iban': 'Facilita un número de cuenta para que ingreses el dinero.',
+    'body-nocontacto': 'Pide que no llames ni lo comentes con nadie, para que nadie pueda desmentirlo.',
+    'combo-bec': 'Suplanta a una persona de confianza para conseguir un pago.',
+    'combo-credenciales': 'Dirige a una página falsa preparada para capturar tu contraseña.',
+    'combo-malware': 'Adjunta un archivo peligroso y añade urgencia para que lo abras.',
+    'combo-extorsion': 'Amenaza y reclama un pago en criptomonedas.',
+    'dmarc-fail': 'El correo no procede del dominio que dice representar.',
+    'spf-fail': 'Lo ha enviado un servidor que no pertenece a esa empresa.',
+    'dkim-fail': 'La firma del correo no valida: el mensaje se ha alterado o es falso.',
+    'from-punycode': 'La dirección usa caracteres especiales que imitan a otra conocida.',
+    'from-tld': 'Escribe desde un tipo de dominio barato, frecuente en fraudes.',
+    'subj-urgency': 'El asunto mete prisa o amenaza: es el recurso más antiguo del fraude.',
+    'body-password': 'Solicita la contraseña dentro del propio correo. Ninguna entidad lo hace.',
+    'body-refresh': 'Redirige por sí solo a otra página nada más abrirlo.',
+    'body-hidden': 'Incluye texto invisible para eludir el filtro de spam.',
+    'body-image': 'Es casi todo una imagen, para que los filtros no puedan leer su texto.',
+    'body-bec': 'Solicita un pago o un cambio de datos bancarios.',
+    'mime-profundo': 'El mensaje anida sus partes unas dentro de otras muchas veces: se hace para que el análisis no llegue al fondo.',
+    'dn-suplanta-propio': 'Se hace pasar por tu propia empresa o tu proveedor de correo, pero escribe desde fuera. Tu departamento informático no escribe desde otro dominio.',
+    'from-basura': 'El dominio del remitente está generado automáticamente, del tipo que se registra por miles para un fraude y se abandona.',
+    'body-buzon': 'Alega que tu buzón está lleno, que tu contraseña caduca o que tienes correo retenido: es el pretexto más habitual para conseguir credenciales.',
+    'url-hosting-gratis': 'El enlace lleva a una página en alojamiento gratuito, no al sitio de la empresa que dice representar.',
+    'subj-premio': 'Anuncia un premio, un sorteo o un bono que no has solicitado.',
+    'att-senuelo': 'Casi todo el mensaje está en el adjunto y no incluye ningún enlace: pretende que abras el fichero sin comprobarlo.',
+    'dn-oficial-freemail': 'Firma como un departamento oficial o una marca, pero escribe desde una cuenta gratuita. Una empresa no opera así.',
+    'body-crypto': 'Menciona criptomonedas: habitual en fraudes de inversión y en la extorsión.',
+    'body-callback': 'Facilita un teléfono para cancelar un cobro que no has realizado. En la llamada te solicitarán tus datos.',
+    'xmailer': 'Se ha enviado con una herramienta de envíos masivos, no desde un cliente de correo corriente.',
+    'url-mismatch': 'Un enlace muestra una dirección pero conduce a otra distinta.',
+    'url-ip': 'Un enlace apunta a una dirección numérica en lugar de a un dominio.',
+    'url-punycode': 'Un enlace usa caracteres especiales que imitan a un sitio conocido.',
+    'url-shortener': 'Hay enlaces acortados que ocultan su destino real.',
+    'url-userinfo': 'Un enlace está construido para aparentar un destino que no es el real.',
+    'att-exec': 'Adjunta un programa: abrirlo instalaría software en tu equipo.',
+    'att-macro': 'Adjunta un Word o un Excel con macros, capaces de ejecutar programas.',
+    'att-html': 'Adjunta una página web como archivo: recurso habitual para robar contraseñas.',
+    'att-double': 'Un archivo lleva doble extensión para aparentar un PDF o una imagen.',
+    'att-mismatch': 'Un archivo declara un formato y por dentro contiene otro.',
+    'att-rtlo': 'El nombre de un archivo emplea un truco para mostrarse invertido.',
+    'dn-mixed-script': 'El nombre del remitente mezcla caracteres de otro alfabeto visualmente idénticos a los nuestros.',
+    'from-malformed': 'La dirección del remitente está manipulada para que el cliente de correo muestre una cosa y el filtro lea otra.',
+    'from-lookalike': 'Escribe desde un dominio que imita el de una marca conocida, con alguna letra cambiada.',
+    'dmarc-none': 'El dominio remitente no ha configurado la protección que impide su suplantación.',
+    'spf-softfail': 'El servidor que lo ha enviado no es exactamente el autorizado.',
+    'spf-neutral': 'El dominio remitente no declara quién puede enviar en su nombre.',
+    'compauth': 'Los filtros de Microsoft no han podido confirmar su autenticidad.',
+    'from-multi': 'El correo declara varios remitentes a la vez: técnica para confundir a los filtros.',
+    'url-zerowidth': 'Un enlace lleva caracteres invisibles intercalados para disimular su destino.',
+    'url-rtlo': 'Un enlace emplea un truco para que la dirección se lea invertida.',
+    'url-data': 'Un enlace incrusta una página completa dentro del propio correo.',
+    'url-multi-at': 'Un enlace muestra al principio una dirección conocida, pero el destino real es otro.',
+    'url-subdomains': 'Un enlace encadena tantos nombres que el verdadero queda oculto al final.',
+    'att-archive-nested': 'Adjunta un comprimido con otro dentro, para impedir el análisis antivirus.',
+    'att-encrypted': 'Adjunta un archivo con contraseña, de modo que ningún antivirus puede examinarlo.',
+    'att-ole': 'Un archivo contiene un formato antiguo de Office que no corresponde a su extensión.',
+    'body-empty': 'El mensaje no dice nada: solo aporta el archivo adjunto.',
+    'rcv-none': 'No consta por dónde ha pasado: se ha inyectado directamente o se ha borrado su rastro.',
     'date-missing': 'El correo no lleva fecha.',
-    'date-skew': 'La fecha que dice el correo no cuadra con la de los servidores por los que pasó.',
+    'date-skew': 'La fecha del correo no concuerda con la de los servidores por los que pasó.',
   };
 
   const CONSEJOS = {
-    CRITICO: ['No pulses ningún enlace ni abras los archivos que trae.',
-      'No respondas, y no llames a los teléfonos que aparezcan en el correo.',
-      'Si ya has escrito tu contraseña en algún sitio, cámbiala ahora. Abre tú la web oficial escribiendo la dirección a mano, no desde aquí.',
-      'Si dice ser tu banco, llama al número que hay detrás de tu tarjeta. Nunca al que venga en el correo.',
-      'Cuando hayas hecho lo anterior, bórralo.'],
-    ALTO: ['No pulses ningún enlace ni abras los archivos que trae.',
-      'No respondas ni llames a los teléfonos que aparezcan.',
-      'Compruébalo por otro camino: abre tú la web oficial escribiendo la dirección a mano, o llama al teléfono de siempre.'],
-    MEDIO: ['De momento no pulses enlaces ni abras archivos.',
-      'Pregunta a quien dice enviarlo, pero por otro medio: llámale o escríbele a la dirección que ya tenías.',
-      'Si te pide dinero, datos o una contraseña, dalo por estafa hasta que alguien te confirme lo contrario.'],
-    BAJO: ['No he visto señales claras de estafa, pero esto no es un certificado.',
-      'Si te pide dinero, contraseñas o datos personales, compruébalo igual por otro camino.',
-      'Ante la duda, no pulses el enlace: abre tú la web escribiendo la dirección a mano.']
+    CRITICO: ['No abras ningún enlace ni ningún archivo adjunto.',
+      'No respondas al mensaje ni llames a los teléfonos que incluye.',
+      'Si ya has introducido tu contraseña, cámbiala ahora: accede a la web oficial escribiendo tú la dirección, nunca desde este correo.',
+      'Si dice ser tu banco, llama al número que figura en el reverso de tu tarjeta, nunca al que indica el mensaje.',
+      'Hecho lo anterior, elimina el correo.'],
+    ALTO: ['No abras ningún enlace ni ningún archivo adjunto.',
+      'No respondas al mensaje ni llames a los teléfonos que incluye.',
+      'Verifícalo por otra vía: accede a la web oficial escribiendo tú la dirección, o llama al teléfono habitual.'],
+    MEDIO: ['De momento, no abras enlaces ni archivos adjuntos.',
+      'Confirma con el remitente por otra vía: llámale o escríbele a la dirección que ya tenías.',
+      'Si solicita dinero, datos o contraseñas, considéralo fraude mientras no se confirme lo contrario.'],
+    BAJO: ['No se han detectado indicios claros de fraude, pero esto no es una garantía.',
+      'Si solicita dinero, contraseñas o datos personales, verifícalo igualmente por otra vía.',
+      'Ante la duda, no abras el enlace: accede a la web escribiendo tú la dirección.']
   };
 
   const TITULARES = {
-    CRITICO: ['Casi seguro que es una estafa', 'No toques nada de este correo.'],
-    ALTO: ['Trátalo como una estafa', 'Tiene varias señales claras de engaño.'],
-    MEDIO: ['Desconfía de este correo', 'Hay cosas que no cuadran.'],
-    BAJO: ['No he visto señales de estafa', 'Aun así, comprueba antes de fiarte de lo que te pida.']
+    CRITICO: ['Es casi con seguridad un fraude', 'No interactúes con ningún elemento del mensaje.'],
+    ALTO: ['Trátalo como un fraude', 'Presenta varias señales claras de engaño.'],
+    MEDIO: ['Desconfía de este correo', 'Hay elementos que no encajan.'],
+    BAJO: ['No se han detectado señales de fraude', 'Aun así, verifica lo que solicite antes de atenderlo.']
   };
 
   const VERDICTO_ES = { CRITICO: 'CRÍTICO', ALTO: 'ALTO', MEDIO: 'MEDIO', BAJO: 'BAJO' };
@@ -215,9 +218,9 @@
     $('#sobre').innerHTML =
       '<div><span class="et">Dice ser</span>' +
       (r.summary.fromDisplay ? '<b>' + esc(r.summary.fromDisplay) + '</b>'
-                             : '<span class="muted">no pone ningún nombre</span>') + '</div>' +
+                             : '<span class="muted">no indica ningún nombre</span>') + '</div>' +
       '<div><span class="et">Escribe desde</span><code>' + direccionCorta(r.summary.from) + '</code></div>' +
-      (relay ? '<div class="small" style="margin-left:108px">Es ' + relay + ': la dirección de verdad está oculta.</div>' : '') +
+      (relay ? '<div class="small" style="margin-left:108px">Es ' + relay + ': la dirección real está oculta.</div>' : '') +
       '<div><span class="et">Asunto</span>' + esc(r.summary.subject || '(sin asunto)') + '</div>';
   }
 
@@ -225,7 +228,7 @@
     const vistos = [];
     for (const f of r.findings.slice().sort((a, b) => (b.points || 0) - (a.points || 0))) {
       if (!(f.points > 0)) continue;
-      const txt = EN_CRISTIANO[f.id];
+      const txt = EXPLICACIONES[f.id];
       if (txt && vistos.indexOf(txt) < 0) vistos.push(txt);
     }
     const razones = vistos.slice(0, 5);
@@ -234,18 +237,18 @@
     $('#p-simple').innerHTML =
       (razones.length
         ? '<div class="card' + (calma ? ' calma' : '') + '"><h3>' +
-          (calma ? 'Lo único que he visto' : 'Por qué te lo digo') + '</h3>' +
+          (calma ? 'Observaciones' : 'Motivos') + '</h3>' +
           razones.map(t => '<div class="motivo"><span class="punto">&#9679;</span><span>' + esc(t) + '</span></div>').join('') +
           '</div>'
         : '') +
 
-      '<div class="card"><h3>Qué hacer ahora</h3><ol class="consejos">' +
+      '<div class="card"><h3>Recomendaciones</h3><ol class="consejos">' +
       CONSEJOS[r.verdict].map(c => '<li>' + esc(c) + '</li>').join('') +
       '</ol></div>' +
 
-      '<div class="aviso-017"><b>¿Necesitas que te lo confirme alguien?</b><br>' +
-      'INCIBE atiende dudas por tel&eacute;fono en el <b>017</b>, gratis y sin dar tus datos. ' +
-      'Si ya has perdido dinero, denúncialo en la Policía o la Guardia Civil.</div>';
+      '<div class="aviso-017"><b>¿Necesitas una confirmación?</b><br>' +
+      'INCIBE atiende consultas en el <b>017</b>, de forma gratuita y sin facilitar tus datos. ' +
+      'Si ya se ha producido una pérdida económica, denúncialo ante la Policía Nacional o la Guardia Civil.</div>';
   }
 
   function comprobaciones(r) {
@@ -286,7 +289,7 @@
         ['IP de origen', s.originIP ? esc(PT.defang(s.originIP)) : '', !!s.originIP]
       ]) + '</div>' +
       (top.length ? '<div class="card"><h3>Motivos principales</h3>' +
-        top.map(f => '<div class="finding"><span class="sev sev-high">ALTO</span><span>' + esc(f.msg) + '</span></div>').join('') +
+        top.map(f => hallazgo('high', esc(f.msg))).join('') +
         '</div>' : '') +
       comprobarCard(r) +
       '<div class="card"><h3>Estructura MIME</h3><div class="tree">' + tree(r.structure, '') + '</div></div>';
@@ -295,7 +298,7 @@
   function comprobarCard(r) {
     const lista = comprobaciones(r);
     if (!lista.length) return '';
-    return '<div class="card"><h3>Comprobar en servicios públicos <span class="muted">(sin registrarte)</span></h3>' +
+    return '<div class="card"><h3>Comprobar en servicios públicos <span class="muted">(no requiere registro)</span></h3>' +
       '<div class="chips">' + lista.map(([label, url, svc]) =>
         '<a class="btn" target="_blank" rel="noopener noreferrer" href="' + esc(url) + '">' +
         esc(label.length > 46 ? label.slice(0, 46) + '...' : label) + ' &rarr; ' + svc + '</a>').join('') +
@@ -314,7 +317,7 @@
   function renderHallazgos(r) {
     const order = { high: 0, medium: 1, low: 2, info: 3 };
     const list = r.findings.slice().sort((a, b) => order[a.sev] - order[b.sev]);
-    const desglose = '<div class="card"><h3>Cómo se reparte la nota ' +
+    const desglose = '<div class="card"><h3>Reparto de la puntuación ' +
       '<span class="muted">(cada categoría tiene un techo; los techos suman 100)</span></h3>' +
       '<table><thead><tr><th>Categoría</th><th>Cuenta</th><th>Reparto</th>' +
       '<th>Bruto</th><th>Reglas</th></tr></thead><tbody>' +
@@ -329,9 +332,9 @@
       '<td colspan="3" class="muted">' + esc(r.verdict) + '</td></tr>' +
       '</tbody></table></div>';
     $('#p-hallazgos').innerHTML = desglose + '<div class="card">' + (list.length ? list.map(f =>
-      '<div class="finding"><span class="sev sev-' + f.sev + '">' + SEVLABEL[f.sev] + '</span>' +
-      '<span>' + esc(f.msg) + (f.fuente ? '<br><span class="muted small">peso ' + f.points + ' &middot; ' + esc(f.fuente) + '</span>' : '') + '</span>' +
-      (f.points ? '<span class="pts">' + (f.points > 0 ? '+' : '') + f.points + '</span>' : '') + '</div>'
+      hallazgo(f.sev, esc(f.msg) +
+        (f.fuente ? '<br><span class="muted small">peso ' + f.points + ' &middot; ' + esc(f.fuente) + '</span>' : '')) +
+      (f.points ? '<span class="pts">' + (f.points > 0 ? '+' : '') + f.points + '</span>' : '')
     ).join('') : '<span class="muted">Sin hallazgos.</span>') + '</div>';
   }
 
@@ -340,7 +343,7 @@
       '<tr' + (h.interesting ? ' class="hl"' : '') + '><td class="k">' + esc(h.name) + '</td>' +
       '<td class="v">' + esc(h.decoded) + '</td></tr>').join('');
     $('#p-cabeceras').innerHTML =
-      '<div class="card"><h3>Cabeceras <span class="muted">(en orden de aparicion; resaltadas las relevantes)</span></h3>' +
+      '<div class="card"><h3>Cabeceras <span class="muted">(en orden de aparición; resaltadas las relevantes)</span></h3>' +
       '<table>' + rows + '</table></div>';
   }
 
@@ -363,7 +366,7 @@
 
   function renderReceived(r) {
     if (!r.received.length) { $('#p-received').innerHTML = '<div class="card muted">Sin cabeceras Received.</div>'; return; }
-    $('#p-received').innerHTML = '<div class="card"><h3>Cadena de saltos <span class="muted">(orden cronologico: abajo el mas cercano al buzon)</span></h3>' +
+    $('#p-received').innerHTML = '<div class="card"><h3>Cadena de saltos <span class="muted">(orden cronológico: el último es el más cercano al buzón)</span></h3>' +
       r.received.map((h, i) => {
         const isOrigin = i === 0;
         return '<div class="hop' + (isOrigin ? ' origin' : '') + '">' +
@@ -396,7 +399,7 @@
         ' &middot; org <b>' + esc(u.orgDomain) + '</b>' + (u.propio ? ' <span class="pill good">del remitente</span>' : '') +
         (u.veces > 1 ? ' &middot; <b>x' + u.veces + '</b>' : '') +
         (u.anchorTexts.length ? '<br>texto: ' + u.anchorTexts.map(t => '"' + esc(t) + '"').join(' / ') : '') + '</div>' +
-        u.flags.map(f => '<div class="finding"><span class="sev sev-' + f.sev + '">' + SEVLABEL[f.sev] + '</span><span>' + esc(f.msg) + '</span></div>').join('') +
+        u.flags.map(f => hallazgo(f.sev, esc(f.msg))).join('') +
         '</div>';
 
     const enlaces = agrupar(r.urls.filter(u => u.tipo === 'enlace')).sort((a, b) => b.flags.length - a.flags.length);
@@ -404,11 +407,11 @@
 
     $('#p-urls').innerHTML =
       '<div class="toolbar" style="margin:0 0 12px"><button id="copyUrls">Copiar todo defanged</button></div>' +
-      '<div class="card"><h3>Enlaces en los que se puede pinchar ' +
+      '<div class="card"><h3>Enlaces del mensaje ' +
       '<span class="muted">(' + enlaces.length + ' destinos distintos)</span></h3></div>' +
       enlaces.map(pinta).join('') +
       (recursos.length
-        ? '<details class="card"><summary style="cursor:pointer">Recursos que carga el correo solo: ' +
+        ? '<details class="card"><summary style="cursor:pointer">Recursos que carga el mensaje por sí solo: ' +
           'imágenes, iconos y fuentes <span class="muted">(' + recursos.length + ' destinos)</span></summary>' +
           recursos.map(pinta).join('') + '</details>'
         : '');
@@ -425,37 +428,33 @@
       '<div class="hashline"><b>md5</b> ' + esc(a.md5) + '</div>' +
       (a.sha1 ? '<div class="hashline"><b>sha1</b> ' + esc(a.sha1) + '</div>' : '') +
       (a.sha256 ? '<div class="hashline"><b>sha256</b> ' + esc(a.sha256) +
-        ' &middot; <a target="_blank" rel="noopener noreferrer" href="https://www.virustotal.com/gui/file/' + esc(a.sha256) + '">VT</a></div>' : '') +
-      a.flags.map(f => '<div class="finding"><span class="sev sev-' + f.sev + '">' + SEVLABEL[f.sev] + '</span><span>' + esc(f.msg) + '</span></div>').join('') +
+        ' &middot; <a target="_blank" rel="noopener noreferrer" href="' + esc(vtFile(a.sha256)) + '">VT</a></div>' : '') +
+      a.flags.map(f => hallazgo(f.sev, esc(f.msg))).join('') +
       '</div>').join('') +
-      '<p class="small">El contenido del adjunto no sale de aquí: si pulsas el enlace de VirusTotal solo viaja el hash.</p>';
+      '<p class="small">El contenido del adjunto no sale del navegador: al abrir VirusTotal solo se envía el hash.</p>';
   }
 
   function renderCuerpo(r) {
     $('#p-cuerpo').innerHTML =
-      '<div class="card"><h3>Texto plano</h3><pre class="block">' + esc(r.bodies.plain || '(vacio)') + '</pre></div>' +
+      '<div class="card"><h3>Texto plano</h3><pre class="block">' + esc(r.bodies.plain || '(vacío)') + '</pre></div>' +
       '<div class="card"><h3>HTML <span class="muted">(' + r.bodies.htmlLength + ' bytes, mostrado como código, nunca renderizado)</span></h3>' +
-      '<pre class="block">' + esc(r.bodies.htmlSource || '(vacio)') + '</pre></div>';
+      '<pre class="block">' + esc(r.bodies.htmlSource || '(vacío)') + '</pre></div>';
+  }
+
+  function bloquesIoc(r) {
+    const d = arr => arr.map(PT.defang);
+    return [['Dominios', d(r.iocs.domains)], ['IPs', d(r.iocs.ips)], ['URLs', d(r.iocs.urls)],
+            ['Hashes', r.iocs.hashes], ['Direcciones', d(r.iocs.emails)]];
   }
 
   function renderIocs(r) {
-    const blocks = [
-      ['Dominios', r.iocs.domainsDefanged],
-      ['IPs', r.iocs.ips.map(PT.defang)],
-      ['URLs', r.iocs.urlsDefanged],
-      ['Hashes', r.iocs.hashes],
-      ['Direcciones', r.iocs.emails.map(PT.defang)]
-    ];
-    $('#p-iocs').innerHTML = blocks.map(([t, arr]) =>
+    const bloques = bloquesIoc(r);
+    $('#p-iocs').innerHTML = bloques.map(([t, arr]) =>
       '<div class="card"><h3>' + t + ' <span class="muted">(' + arr.length + ')</span></h3>' +
       '<pre class="block">' + esc(arr.join('\n') || '-') + '</pre></div>').join('') +
       '<div class="toolbar"><button id="copyAll">Copiar todo</button></div>';
-    $('#copyAll').onclick = e => copy(iocText(r), e.target);
-  }
-
-  function iocText(r) {
-    return ['# dominios', ...r.iocs.domainsDefanged, '', '# ips', ...r.iocs.ips.map(PT.defang),
-      '', '# urls', ...r.iocs.urlsDefanged, '', '# hashes', ...r.iocs.hashes].join('\n');
+    $('#copyAll').onclick = e =>
+      copy(bloques.map(([t, arr]) => '# ' + t.toLowerCase() + '\n' + arr.join('\n')).join('\n\n'), e.target);
   }
 
   function renderJson(r) {
@@ -480,7 +479,7 @@
       renderBatchList();
       show(report);
     } catch (err) {
-      alert(err.formatoNoSoportado ? err.message : 'No se pudo analizar lo pegado: ' + err.message);
+      alert(err.formatoNoSoportado ? err.message : 'No se ha podido analizar el texto pegado: ' + err.message);
     }
   });
 
@@ -501,7 +500,7 @@
   function setAdvanced(on) {
     $('#advanced').hidden = !on;
     $('#btnAdv').setAttribute('aria-expanded', on ? 'true' : 'false');
-    $('#btnAdvTxt').textContent = on ? 'Ocultar el análisis completo' : 'Ver el análisis completo';
+    $('#btnAdvTxt').textContent = on ? 'Ocultar el análisis detallado' : 'Ver el análisis detallado';
     try { localStorage.setItem('phishtriage.avanzado', on ? '1' : '0'); } catch (e) {}
   }
 
@@ -512,7 +511,7 @@
   setAdvanced(avanzadoGuardado);
 
   if (!window.isSecureContext) {
-    $('#offlineBadge').textContent = 'Ábrelo por https: faltan algunos datos';
+    $('#offlineBadge').textContent = 'Ábrelo por https: faltan algunos datos del análisis';
     $('#offlineBadge').style.color = 'var(--med)';
   }
 })();

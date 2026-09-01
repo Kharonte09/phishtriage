@@ -157,10 +157,11 @@ check('un aviso real del banco, alarmista pero legítimo, se queda en BAJO',
 const tienda = await analizar(TIENDA, 'tienda.eml');
 check('un boletín real de una tienda se queda en BAJO',
   tienda.verdict === 'BAJO', tienda.verdict + ' ' + tienda.score + ' ' + tienda.findings.map(f => f.id));
-check('los enlaces a la casa del propio remitente no cuentan como indicio',
-  !tienda.findings.some(f => f.id === 'url-creds'));
+check('los enlaces al dominio del propio remitente no cuentan como indicio',
+  tienda.urls.every(u => !u.propio || u.flags.length === 0),
+  tienda.urls.filter(u => u.propio && u.flags.length).map(u => u.host).join());
 check('"steamstatic" no se confunde con la marca "teams"',
-  !tienda.findings.some(f => f.id === 'url-brand'));
+  !tienda.findings.some(f => /lookalike|mixed-script/.test(f.id)));
 check('el texto oculto de plantilla no cuenta si el correo autentica',
   !tienda.findings.some(f => f.id === 'body-hidden'));
 check('las imágenes y las fuentes no se cuentan como enlaces',
@@ -264,7 +265,7 @@ const eslavo = await analizar(ESLAVO, 'eslavo.eml');
 check('boletin de un proveedor de envio masivo (antes 43)',
   esp.verdict === 'BAJO', esp.verdict + ' ' + esp.score + ' ' + esp.findings.map(f => f.id));
 check('el Return-Path del proveedor ya no cuenta si el correo autentica',
-  !esp.findings.some(f => f.id === 'rp-mismatch'));
+  esp.findings.every(f => f.points <= 0), esp.findings.map(f => f.id).join());
 check('lista de correo reenviada con ARC valido (antes 48)',
   lista.verdict === 'BAJO', lista.verdict + ' ' + lista.score + ' ' + lista.findings.map(f => f.id));
 check('la cadena ARC se tiene en cuenta y resta',
@@ -347,11 +348,11 @@ check('ninguna regla se pasa sola del techo de su categoria',
 
 console.log('\n== la vista sencilla no se queda muda ==');
 const uiSrc = fs.readFileSync(path.join(ROOT, 'assets/ui.js'), 'utf8');
-const bloqueUI = uiSrc.slice(uiSrc.indexOf('const EN_CRISTIANO = {'));
+const bloqueUI = uiSrc.slice(uiSrc.indexOf('const EXPLICACIONES = {'));
 const frases = new Set(Array.from(bloqueUI.slice(0, bloqueUI.indexOf('\n  };'))
   .matchAll(/'([a-z0-9-]+)':/g)).map(m => m[1]));
 const mudas = conFuente.filter(r => r.pts > 0 && !frases.has(r.id)).map(r => r.id);
-check('toda regla que suma tiene su frase en castellano llano', mudas.length === 0, mudas.join(' '));
+check('toda regla que suma tiene su explicación en lenguaje corriente', mudas.length === 0, mudas.join(' '));
 
 let JSDOM;
 try { ({ JSDOM } = require('jsdom')); } catch (e) { /* opcional */ }
@@ -388,8 +389,8 @@ if (!JSDOM) {
   }
 
   check('la interfaz pinta el resultado', !d.querySelector('#result').hidden);
-  check('el veredicto se lee sin saber de esto',
-    /estafa/i.test(d.querySelector('#verdictTitle').textContent),
+  check('el veredicto se lee sin conocimientos técnicos',
+    /fraude/i.test(d.querySelector('#verdictTitle').textContent),
     d.querySelector('#verdictTitle').textContent);
   check('y la etiqueta tecnica sigue estando',
     /CRÍTICO/.test(d.querySelector('#verdictNota').textContent) &&
@@ -417,10 +418,11 @@ if (!JSDOM) {
     d.querySelectorAll('#p-simple a[href*="virustotal.com"], #p-simple a[href*="abuseipdb.com"]').length === 0);
   check('los enlaces no filtran de donde vienen',
     Array.from(d.querySelectorAll('#result a[target="_blank"]')).every(a => /noreferrer/.test(a.getAttribute('rel') || '')));
-  check('el desglose de la nota se pinta', /reparte la nota/.test(d.querySelector('#p-hallazgos').textContent));
+  check('el desglose de la nota se pinta', /Reparto de la puntuación/.test(d.querySelector('#p-hallazgos').textContent));
   check('los hashes llegan a la pantalla', /[0-9a-f]{64}/.test(d.querySelector('#p-adjuntos').textContent));
   check('la pestaña de URLs separa enlaces de recursos',
-    /Enlaces en los que se puede pinchar/.test(d.querySelector('#p-urls').textContent));
+    /Enlaces del mensaje/.test(d.querySelector('#p-urls').textContent) &&
+    /Recursos que carga el mensaje/.test(d.querySelector('#p-urls').textContent));
   check('EL HTML DEL CORREO NO SE EJECUTA',
     d.querySelectorAll('#p-cuerpo form, #p-cuerpo input, #p-cuerpo script, #p-cuerpo img').length === 0);
 }

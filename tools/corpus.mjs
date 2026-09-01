@@ -1,24 +1,23 @@
 /**
- * Pasa PhishTriage por encima de correo real y dice como le ha ido.
+ * Ejecuta PhishTriage sobre correo real y resume el resultado.
  *
  *   node tools/corpus.mjs <carpeta>
  *   node tools/corpus.mjs <carpeta> --esperado phishing
  *   node tools/corpus.mjs <carpeta> --esperado legitimo --csv notas.csv
  *   node tools/corpus.mjs <carpeta-phishing> <carpeta-legitimo>
  *
- * Con una carpeta saca el reparto de notas, en que se equivoca y cuanto dispara
- * cada regla. Con dos saca la razon de verosimilitud de cada indicio: cuantas
- * veces mas aparece en el fraude que en el correo bueno. Eso es lo que deberia
- * decidir su peso, y no lo que le parezca a nadie. Una regla con razon 1 no
- * distingue nada aunque suene muy grave; una con razon 30 vale su peso en oro
- * aunque suene tonta.
+ * Con una carpeta devuelve el reparto de notas, los fallos y la frecuencia de
+ * disparo de cada regla. Con dos, la razon de verosimilitud de cada indicio:
+ * cuantas veces mas aparece en el fraude que en el correo legitimo. Esa razon
+ * es lo que fija su peso: una regla con razon 1 no distingue nada, por grave
+ * que suene su enunciado.
  *
- * Acepta ficheros sueltos (.eml) y buzones mbox, que parte por su cabecera
- * "From " de separacion.
+ * Acepta ficheros .eml sueltos y buzones mbox, que se parten por su cabecera
+ * de separacion "From ".
  *
- * No abre ningun adjunto ni sigue ningun enlace: el motor solo lee bytes.
- * Un corpus de phishing lleva malware de verdad dentro, asi que Defender va a
- * protestar al descomprimirlo. Que proteste; esto no lo ejecuta.
+ * No abre ningun adjunto ni sigue ningun enlace: el motor solo lee bytes. Un
+ * corpus de phishing contiene malware real, de modo que el antivirus avisara
+ * al descomprimirlo; nada de eso se ejecuta aqui.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -79,7 +78,7 @@ async function analizar(carpeta) {
       } catch (e) { fallos++; }
     }
   }
-  if (!salida.length) { console.error('No he encontrado ningun correo en ' + carpeta); process.exit(1); }
+  if (!salida.length) { console.error('No se ha encontrado ningun correo en ' + carpeta); process.exit(1); }
   return { r: salida, fallos };
 }
 
@@ -108,7 +107,7 @@ if (carpetaHam) {
       (f.razon >= 100 ? '>100' : f.razon.toFixed(1)).padStart(11) +
       (f.razon < 1.5 ? '   (no distingue)' : String(Math.round(3.5 * Math.log2(f.razon))).padStart(6)));
   }
-  console.log('\npts = redondeo(3,5 x log2(razon)), recortado luego al techo de su categoria.');
+  console.log('\npts = redondeo(3,5 x log2(razon)), recortado despues al techo de su categoria.');
   process.exit(0);
 }
 
@@ -151,7 +150,7 @@ if (esperado) {
   }
 }
 
-console.log('\nCuanto dispara cada regla (sobre ' + total + ' correos)');
+console.log('\nFrecuencia de disparo de cada regla (sobre ' + total + ' correos)');
 for (const [id, n] of Object.entries(disparos(resultados)).sort((a, b) => b[1] - a[1])) {
   console.log('  ' + (100 * n / total).toFixed(1).padStart(5) + '%  ' + String(n).padStart(6) + '  ' + id);
 }

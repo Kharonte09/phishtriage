@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PhishTriage - ¿es una estafa este correo?</title>
-<meta name="description" content="Suelta un correo sospechoso y te dice si es una estafa, por qué, y qué hacer. Se analiza dentro de tu navegador: no se sube a ningún sitio.">
+<title>PhishTriage - análisis de correos sospechosos</title>
+<meta name="description" content="Analiza un correo sospechoso e indica si se trata de un fraude, por qué motivos y qué hacer. El análisis se realiza en tu navegador: el correo no se envía a ningún servidor.">
 <meta name="color-scheme" content="light dark">
 <link rel="stylesheet" href="assets/styles.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#127907;</text></svg>">
@@ -14,8 +14,8 @@
 <header class="top">
   <div class="wrap">
     <div class="logo">phish<span>triage</span></div>
-    <div class="tagline">&iquest;Te ha llegado un correo raro? M&iacute;ralo aqu&iacute; antes de tocar nada.</div>
-    <span class="badge-offline" id="offlineBadge">No sale de tu ordenador</span>
+    <div class="tagline">&iquest;Has recibido un correo sospechoso? Anal&iacute;zalo antes de abrir nada.</div>
+    <span class="badge-offline" id="offlineBadge">No sale de tu equipo</span>
   </div>
 </header>
 
@@ -23,8 +23,8 @@
 
   <div id="drop">
     <h2>Arrastra aqu&iacute; el correo</h2>
-    <p>O haz clic para buscarlo en tu ordenador.</p>
-    <p class="hint muted">Se abre aqu&iacute; dentro, en tu navegador. No se env&iacute;a a ning&uacute;n servidor.</p>
+    <p>O haz clic para seleccionarlo en tu equipo.</p>
+    <p class="hint muted">El an&aacute;lisis se realiza en tu navegador. El correo no se env&iacute;a a ning&uacute;n servidor.</p>
     <input type="file" id="file" accept=".eml,.txt,message/rfc822" multiple hidden>
   </div>
 
@@ -33,14 +33,14 @@
   </div>
 
   <details class="card" style="margin-top:14px">
-    <summary style="cursor:pointer">&iquest;C&oacute;mo descargo el correo?</summary>
+    <summary style="cursor:pointer">&iquest;C&oacute;mo obtengo el fichero del correo?</summary>
     <table style="margin-top:10px">
       <tr><td class="k">Gmail</td><td class="v">Abre el correo &rarr; men&uacute; <b>&#8942;</b> &rarr; <b>Descargar mensaje</b>.</td></tr>
       <tr><td class="k">Outlook (programa)</td><td class="v">Arrastra el correo desde la lista hasta el escritorio.</td></tr>
       <tr><td class="k">Outlook (web)</td><td class="v">Abre el correo en otra ventana &rarr; <b>&#8942;</b> &rarr; <b>Guardar como</b>.</td></tr>
       <tr><td class="k">Apple Mail</td><td class="v">Arrastra el correo a una carpeta.</td></tr>
       <tr><td class="k">Thunderbird</td><td class="v">Clic derecho &rarr; <b>Guardar como &rarr; Archivo</b>.</td></tr>
-      <tr><td class="k">Si no te aclaras</td><td class="v">Busca <b>mensaje original</b> o
+      <tr><td class="k">Si no lo encuentras</td><td class="v">Busca <b>mensaje original</b> o
         <b>ver c&oacute;digo fuente</b>, selecciona todo, c&oacute;pialo y p&eacute;galo aqu&iacute; con <b>Ctrl+V</b>.</td></tr>
     </table>
   </details>
@@ -62,19 +62,19 @@
       </div>
     </div>
 
-    <!-- El correo que se esta mirando -->
+    <!-- El correo analizado -->
     <div class="sobre" id="sobre"></div>
 
-    <!-- Lo que ve todo el mundo. Nunca se oculta. -->
+    <!-- Vista principal: siempre visible -->
     <section id="p-simple" class="simple-view"></section>
 
     <div class="adv-bar">
       <button id="btnAdv" class="adv-toggle" aria-expanded="false" aria-controls="advanced">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
-        <span id="btnAdvTxt">Ver el an&aacute;lisis completo</span>
+        <span id="btnAdvTxt">Ver el an&aacute;lisis detallado</span>
       </button>
-      <span class="small muted">Detalles avanzados</span>
+      <span class="small muted">Detalle t&eacute;cnico</span>
     </div>
 
     <div id="advanced" hidden>
@@ -107,9 +107,9 @@
   <div id="multi" hidden></div>
 
   <footer>
-    Esta es una herramienta de an&aacute;lisis parcial: es posible que no acierte el 100% de las
-    veces. Es una ayuda para cuando no tengas claro si el correo que tienes delante puede ser
-    un intento de phishing o no.
+    Herramienta de an&aacute;lisis orientativa: no acierta siempre y no sustituye a una
+    verificaci&oacute;n por otra v&iacute;a. Sirve de ayuda cuando no est&aacute; claro si un correo
+    es un intento de phishing.
     &middot; <a href="https://github.com/Kharonte09/phishtriage" target="_blank" rel="noopener noreferrer">c&oacute;digo fuente</a>
   </footer>
 </main>

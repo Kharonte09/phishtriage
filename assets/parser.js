@@ -172,7 +172,8 @@
   const RE_IPV4 = /\b((?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})\b/;
   const RE_IPV6 = /\b(?:[0-9A-Fa-f]{1,4}:){3,7}[0-9A-Fa-f]{1,4}\b|\b(?:[0-9A-Fa-f]{1,4}:){1,6}:[0-9A-Fa-f]{1,4}\b/;
 
-  function isIP(s) { return new RegExp('^(?:' + RE_IPV4.source.replace(/\\b/g, '') + '|' + RE_IPV6.source.replace(/\\b/g, '') + ')$').test(String(s)); }
+  const RE_IP = new RegExp('^(?:' + RE_IPV4.source.replace(/\\b/g, '') + '|' + RE_IPV6.source.replace(/\\b/g, '') + ')$');
+  function isIP(s) { return RE_IP.test(String(s)); }
 
   function isPrivateIP(ip) {
     if (!ip) return false;
@@ -330,7 +331,7 @@
     const cd = parseParams(headerGet(headers, 'content-disposition') || '');
     const enc = (headerGet(headers, 'content-transfer-encoding') || '7bit').trim().toLowerCase();
     const node = {
-      headers, rawHeaders: hBlock, mime: ct.value || 'text/plain', params: ct.params,
+      headers, mime: ct.value || 'text/plain', params: ct.params,
       disposition: cd.value || '', dispParams: cd.params, encoding: enc,
       body, children: [], depth
     };
@@ -445,14 +446,13 @@
 
   function parseReceived(headers) {
     const raw = headerAll(headers, 'received');
-    const hops = raw.map((line, i) => {
+    const hops = raw.map(line => {
       const dateM = line.match(/;\s*([^;]+)$/);
       const date = dateM ? dateM[1].trim().replace(/\s+/g, ' ') : null;
       const ts = date ? Date.parse(date.replace(/\s*\([^)]*\)\s*$/, '')) : NaN;
       const fromM = line.match(/\bfrom\s+([^\s;()]+)/i);
       const byM = line.match(/\bby\s+([^\s;()]+)/i);
       const withM = line.match(/\bwith\s+([A-Za-z0-9._+-]+)/i);
-      const idM = line.match(/\bid\s+([^\s;()]+)/i);
       const forM = line.match(/\bfor\s+<?([^\s;<>()]+@[^\s;<>()]+)>?/i);
       const ips = [];
       const reAll = new RegExp(RE_IPV4.source, 'g');
@@ -461,9 +461,9 @@
       const m6 = line.match(new RegExp(RE_IPV6.source, 'g'));
       if (m6) for (const x of m6) if (ips.indexOf(x) < 0 && x.indexOf(':') > 0) ips.push(x);
       return {
-        index: raw.length - i, raw: line.replace(/\s+/g, ' ').trim(),
+        raw: line.replace(/\s+/g, ' ').trim(),
         from: fromM ? fromM[1] : null, by: byM ? byM[1] : null,
-        with: withM ? withM[1].trim() : null, id: idM ? idM[1] : null,
+        with: withM ? withM[1].trim() : null,
         for: forM ? forM[1] : null, date, ts: isNaN(ts) ? null : ts,
         ips, publicIPs: ips.filter(ip => !isPrivateIP(ip))
       };
@@ -491,6 +491,11 @@
   const IBAN_RE = /\b[A-Z]{2}\d{2}[ ]?(?:[A-Za-z0-9]{4}[ ]?){3,7}[A-Za-z0-9]{1,4}\b/;
 
   const URL_RE = /\b(?:https?|ftp|file):\/\/[^\s<>"'`)\]}]+|\bwww\.[a-z0-9-]+(?:\.[a-z0-9-]+)+[^\s<>"'`)\]}]*/gi;
+
+  const urlsEn = (t) => String(t || '').match(URL_RE) || [];
+
+  const PINCHABLES = new Set(['html:a', 'html:form', 'html:refresh', 'text']);
+  const FLAGS_DEBILES = new Set(['url-tld', 'url-subdomains']);
 
   function parseUrl(u) {
     let s = String(u).trim().replace(/[)>\]}.,;:'"]+$/, '');
@@ -544,22 +549,16 @@
         const re2 = /<(?:img|form|[a-z]+)\b[^>]*(?:src|action|background)\s*=\s*["']?([^"'\s>]+)/gi;
         while ((m = re2.exec(htmlText))) add(decodeEntities(m[1]), '[asset]', 'html:asset');
       }
-      const bare = htmlText.replace(/<[^>]+>/g, ' ');
-      let m2; const re3 = new RegExp(URL_RE.source, 'gi');
-      while ((m2 = re3.exec(bare))) add(decodeEntities(m2[0]), null, 'html:text');
+      for (const u of urlsEn(htmlText.replace(/<[^>]+>/g, ' '))) add(decodeEntities(u), null, 'html:text');
       const mr = htmlText.match(/http-equiv\s*=\s*["']?refresh["']?[^>]*url\s*=\s*([^"'>\s]+)/i);
       if (mr) add(decodeEntities(mr[1]), '[meta refresh]', 'html:refresh');
     }
-    if (plainText) {
-      let m; const re = new RegExp(URL_RE.source, 'gi');
-      while ((m = re.exec(plainText))) add(m[0], null, 'text');
-    }
+    if (plainText) for (const u of urlsEn(plainText)) add(u, null, 'text');
 
     return Array.from(found.values()).map(entry => {
       const p = entry.parsed;
       const texts = Array.from(entry.texts);
-      const PINCHABLES = 'html:a html:form html:refresh text'.split(' ');
-      const tipo = Array.from(entry.sources).some(x => PINCHABLES.indexOf(x) >= 0) ? 'enlace' : 'recurso';
+      const tipo = Array.from(entry.sources).some(x => PINCHABLES.has(x)) ? 'enlace' : 'recurso';
       const flags = [];
       const host = p.host;
       const od = orgDomain(host);
@@ -567,29 +566,28 @@
 
       if (isIP(host)) flags.push({ id: 'url-ip', sev: 'high', msg: 'URL apunta a una IP directa, sin dominio' });
       if (/(^|\.)xn--/i.test(host)) flags.push({ id: 'url-punycode', sev: 'high', msg: 'Dominio punycode (posible homoglifo IDN)' });
-      if (/[\u202A-\u202E\u2066-\u2069]/.test(p.url)) flags.push({ id: 'url-rtlo', sev: 'high', msg: 'Caracteres de control bidireccional en la URL: la dirección se lee al revés de como es' });
+      if (/[\u202A-\u202E\u2066-\u2069]/.test(p.url)) flags.push({ id: 'url-rtlo', sev: 'high', msg: 'Caracteres de control bidireccional en la URL: invierten la lectura de la dirección' });
       if (/[\u200B-\u200D\uFEFF\u2060]/.test(p.url)) flags.push({ id: 'url-zerowidth', sev: 'high', msg: 'Caracteres invisibles de ancho cero dentro de la URL' });
-      if ((p.userinfo.match(/@/g) || []).length >= 1) flags.push({ id: 'url-multi-at', sev: 'high', msg: 'Varias "@" en la dirección: todo lo anterior a la última es decorado, el destino real es ' + host });
+      if ((p.userinfo.match(/@/g) || []).length >= 1) flags.push({ id: 'url-multi-at', sev: 'high', msg: 'Varias "@" en la dirección: lo anterior a la última es decoración; el destino real es ' + host });
       if (p.userinfo) flags.push({ id: 'url-userinfo', sev: 'high', msg: 'Autoridad con "@" (' + p.userinfo + '@): oculta el host real' });
       if (SHORTENERS.has(od)) flags.push({ id: 'url-shortener', sev: 'medium', msg: 'Acortador de URL: destino oculto' });
       if (RISKY_TLD.has(tld)) flags.push({ id: 'url-tld', sev: 'medium', msg: 'TLD de alto abuso: .' + tld });
       if ((host.match(/\./g) || []).length >= 4) flags.push({ id: 'url-subdomains', sev: 'low', msg: 'Exceso de subdominios (' + host + ')' });
       if (p.scheme === 'data' && tipo === 'enlace' && /html|svg|xml|script/.test(p.path)) {
-        flags.push({ id: 'url-data', sev: 'high', msg: 'El enlace lleva una pagina entera incrustada dentro del propio correo (data: URI)' });
+        flags.push({ id: 'url-data', sev: 'high', msg: 'El enlace incrusta una página completa dentro del propio mensaje (data: URI)' });
       }
 
       for (const t of texts) {
-        const tp = t.match(URL_RE);
+        const tp = urlsEn(t)[0];
         if (tp) {
-          const shownHost = parseUrl(tp[0]).host;
+          const shownHost = parseUrl(tp).host;
           if (shownHost && orgDomain(shownHost) !== od) {
             flags.push({ id: 'url-mismatch', sev: 'high', msg: 'El texto muestra ' + shownHost + ' pero el enlace va a ' + host });
           }
         }
       }
-      const DEBILES = 'url-tld url-subdomains url-hosting-gratis'.split(' ');
       const enCasa = propios.has(od);
-      const flagsFinales = enCasa ? flags.filter(f => DEBILES.indexOf(f.id) < 0) : flags;
+      const flagsFinales = enCasa ? flags.filter(f => !FLAGS_DEBILES.has(f.id)) : flags;
 
       return {
         url: p.url, defanged: defang(p.url), scheme: p.scheme, host, orgDomain: od, propio: enCasa, tipo,
@@ -688,15 +686,15 @@
       const flags = [];
       if (EXEC_EXT.has(ext)) flags.push({ id: 'att-exec', sev: 'high', msg: 'Extensión ejecutable/script: .' + ext });
       if (MACRO_EXT.has(ext)) flags.push({ id: 'att-macro', sev: 'high', msg: 'Office con macros habilitadas: .' + ext });
-      if (HTML_EXT.has(ext)) flags.push({ id: 'att-html', sev: 'high', msg: 'Adjunto HTML/SVG: tipico de phishing local (smuggling)' });
+      if (HTML_EXT.has(ext)) flags.push({ id: 'att-html', sev: 'high', msg: 'Adjunto HTML/SVG: habitual en phishing local (HTML smuggling)' });
       if (/\.[a-z0-9]{2,4}\s*\.[a-z0-9]{2,4}$/i.test(name)) flags.push({ id: 'att-double', sev: 'high', msg: 'Doble extensión en el nombre' });
       if (/[‪-‮⁦-⁩]/.test(name)) flags.push({ id: 'att-rtlo', sev: 'high', msg: 'Caracteres de control bidireccional (RTLO) en el nombre' });
       if (magic === 'PE/DOS ejecutable (MZ)' && !EXEC_EXT.has(ext)) flags.push({ id: 'att-mismatch', sev: 'high', msg: 'Cabecera MZ pero extensión .' + ext + ': tipo declarado falso' });
       if (magic === 'RTF' && ['rtf'].indexOf(ext) < 0) flags.push({ id: 'att-mismatch', sev: 'high', msg: 'Es un RTF disfrazado de .' + ext + ': vector habitual de exploits de Office' });
       if (magic === 'OLE2 (Office 97-2003)' && ['doc', 'xls', 'ppt'].indexOf(ext) < 0) flags.push({ id: 'att-ole', sev: 'medium', msg: 'Contenedor OLE2 con extensión .' + ext });
       const zip = inspeccionaZip(bytes);
-      if (zip.cifrado) flags.push({ id: 'att-encrypted', sev: 'high', msg: 'Archivo comprimido con contraseña: ningún antivirus puede mirar dentro' });
-      if (zip.anidado) flags.push({ id: 'att-archive-nested', sev: 'high', msg: (CONTAINER_EXT.has(extOf(zip.anidado)) ? 'Comprimido dentro de otro comprimido' : 'Programa dentro del comprimido') + ' (' + zip.anidado + '): se hace para esquivar el antivirus' });
+      if (zip.cifrado) flags.push({ id: 'att-encrypted', sev: 'high', msg: 'Archivo comprimido con contraseña: impide el análisis antivirus' });
+      if (zip.anidado) flags.push({ id: 'att-archive-nested', sev: 'high', msg: (CONTAINER_EXT.has(extOf(zip.anidado)) ? 'Comprimido dentro de otro comprimido' : 'Programa dentro del comprimido') + ' (' + zip.anidado + '): técnica para eludir el antivirus' });
       list.push({
         filename: name, mime: n.mime, declaredEncoding: n.encoding, disposition: n.disposition,
         size: bytes.length, sizeHuman: humanSize(bytes.length), magic, ext,
@@ -705,6 +703,12 @@
     }
     return list;
   }
+
+  const CABECERAS_UTILES = new Set(('from reply-to return-path to cc bcc subject date message-id ' +
+    'in-reply-to references x-mailer user-agent x-originating-ip authentication-results received-spf ' +
+    'dkim-signature arc-authentication-results x-forefront-antispam-report x-microsoft-antispam ' +
+    'x-spam-status x-spam-score list-unsubscribe content-type mime-version x-priority importance ' +
+    'sender x-sender x-original-from x-authenticated-sender x-php-originating-script').split(' '));
 
   const CATEGORIAS = {
     auth:       { techo: 30, nombre: 'Autenticación' },
@@ -786,19 +790,19 @@
 
   const COMBOS = [
     { id: 'combo-bec', pts: 22, sev: 'high',
-      msg: 'Encaja con el fraude del jefe: alguien que dice ser de la empresa, desde una cuenta que no es la suya, pidiendo un pago',
+      msg: 'Compatible con el fraude del CEO: supuesto responsable de la empresa, cuenta ajena a ella y solicitud de pago',
       si: ids => (ids.has('from-freemail-cargo') || ids.has('replyto-freemail'))
         && (ids.has('body-bec') || ids.has('body-iban') || ids.has('body-nocontacto')) },
     { id: 'combo-credenciales', pts: 18, sev: 'high',
-      msg: 'Encaja con el robo de contraseñas: te lleva a una página falsa y te pide que te identifiques',
+      msg: 'Compatible con el robo de credenciales: dirige a una página falsa y solicita identificarse',
       si: ids => ids.has('body-password')
         && (ids.has('url-mismatch') || ids.has('url-punycode') || ids.has('url-ip') || ids.has('url-tld')) },
     { id: 'combo-malware', pts: 18, sev: 'high',
-      msg: 'Encaja con el envío de malware: adjunto peligroso y una excusa para que lo abras deprisa',
+      msg: 'Compatible con el envío de malware: adjunto peligroso y un pretexto para abrirlo con urgencia',
       si: ids => (ids.has('att-exec') || ids.has('att-macro') || ids.has('att-encrypted') || ids.has('att-archive-nested'))
         && (ids.has('body-empty') || ids.has('subj-urgency') || ids.has('dmarc-fail') || ids.has('spf-fail')) },
     { id: 'combo-extorsion', pts: 15, sev: 'high',
-      msg: 'Encaja con la extorsión: amenaza y una cartera de criptomonedas para pagar',
+      msg: 'Compatible con la extorsión: amenaza y una cartera de criptomonedas para el pago',
       si: ids => ids.has('body-crypto')
         && (ids.has('from-tld') || ids.has('spf-neutral') || ids.has('dmarc-none') || ids.has('subj-urgency')) }
   ];
@@ -833,9 +837,9 @@
   async function analyze(rawLatin1, meta) {
     meta = meta || {};
     if (/^\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1/.test(rawLatin1)) {
-      const e = new Error('Esto es un .msg de Outlook, no un correo que pueda leer. ' +
-        'En Outlook: abre el correo, Archivo → Guardar como, y elige formato .eml. ' +
-        'O más fácil: busca "ver origen del mensaje", copia todo y pégalo aquí con Ctrl+V.');
+      const e = new Error('El fichero es un .msg de Outlook, un contenedor que esta herramienta no lee. ' +
+        'En Outlook: abre el correo, Archivo → Guardar como, y elige el formato .eml. ' +
+        'Como alternativa, abre "ver origen del mensaje", copia todo el contenido y pégalo aquí con Ctrl+V.');
       e.formatoNoSoportado = 'msg';
       throw e;
     }
@@ -847,9 +851,9 @@
     ];
     for (const [magia, queEs] of OTROS_FORMATOS) {
       if (magia.test(rawLatin1)) {
-        const e = new Error('Esto es ' + queEs + ', no un correo. Necesito el correo entero, ' +
+        const e = new Error('El fichero es ' + queEs + ', no un correo. Se necesita el mensaje completo ' +
           'con sus cabeceras: guárdalo como .eml, o abre "ver origen del mensaje", ' +
-          'copia todo y pégalo aquí con Ctrl+V.');
+          'copia todo el contenido y pégalo aquí con Ctrl+V.');
         e.formatoNoSoportado = 'otro';
         throw e;
       }
@@ -859,9 +863,9 @@
     const H = root.headers;
     if (!['from', 'received', 'subject', 'to', 'date', 'message-id'].some(h => headerGet(H, h))) {
       const e = new Error(rawLatin1.trim()
-        ? 'Esto no parece un correo: no tiene ninguna cabecera (From, Subject, Received...). ' +
-          'Si has pegado solo el texto del mensaje, necesito además la parte de arriba: ' +
-          'busca "ver original" o "ver origen del mensaje" y copia todo.'
+        ? 'El contenido no parece un correo: no incluye ninguna cabecera (From, Subject, Received...). ' +
+          'Si solo se ha pegado el texto del mensaje, faltan las cabeceras: ' +
+          'abre "ver original" o "ver origen del mensaje" y copia todo el contenido.'
         : 'El fichero está vacío.');
       e.formatoNoSoportado = 'sin-cabeceras';
       throw e;
@@ -903,7 +907,7 @@
     const noTransport = auth.raw.length === 0 && hops.length === 0;
 
 
-    // --- 1. ¿Autentica? ------------------------------------------------------
+    // --- 1. Autenticación -----------------------------------------------------
     const S = (v) => (v || '').toLowerCase();
 
     const arcOk = auth.arcChain > 0 && ['pass', 'none', null, ''].indexOf(S(auth.arc)) >= 0;
@@ -918,13 +922,13 @@
 
     if (S(auth.dmarc) === 'fail') { if (!arcOk) push('dmarc-fail', 'DMARC fail: no hay alineamiento con el dominio del From'); }
     else if (S(auth.dmarc) === 'none') push('dmarc-none', 'DMARC none: el dominio no publica política DMARC');
-    else if (S(auth.dmarc) === 'pass') push('ok-dmarc', 'DMARC pass: el correo viene de donde dice venir');
+    else if (S(auth.dmarc) === 'pass') push('ok-dmarc', 'DMARC pass: el mensaje procede del dominio que dice representar');
 
     if (auth.compauth && ['fail', 'softpass', 'none'].indexOf(S(auth.compauth)) >= 0) {
       push('compauth', 'compauth=' + auth.compauth + ' (Microsoft marca autenticación compuesta débil)');
     }
 
-    if (arcOk) push('ok-arc', 'Cadena ARC presente (' + auth.arcChain + ' sello(s)): el correo ha pasado por un reenviador que da fe de que autenticaba en origen');
+    if (arcOk) push('ok-arc', 'Cadena ARC presente (' + auth.arcChain + ' sello(s)): un reenviador certifica que el mensaje autenticaba en origen');
 
     const alignment = { spf: null, dkim: null };
     if (fromOrg && auth.spfDomain) alignment.spf = orgDomain(auth.spfDomain) === fromOrg;
@@ -932,11 +936,11 @@
 
     const autentica = S(auth.dmarc) === 'pass' || alignment.dkim === true || arcOk;
 
-    // --- 2. ¿Quien escribe de verdad? ----------------------------------------
+    // --- 2. Identidad real del remitente --------------------------------------
     if (replyTo[0] && from[0] && FREEMAIL.has(fromOrg) &&
         replyTo[0].address.toLowerCase() !== from[0].address.toLowerCase() &&
         (!replyTo[0].orgDomain || replyTo[0].orgDomain === fromOrg)) {
-      push('replyto-freemail', 'La respuesta iría a ' + replyTo[0].address + ', otra cuenta distinta de la que envía');
+      push('replyto-freemail', 'La respuesta se dirigiría a ' + replyTo[0].address + ', distinta de la cuenta remitente');
     }
     if (from[0]) {
       const dn = from[0].name || '';
@@ -945,26 +949,26 @@
       const miDominio = to[0] && to[0].domain ? orgDomain(to[0].domain) : null;
       if (dn && miDominio && fromOrg !== miDominio &&
           dn.toLowerCase().includes(miDominio)) {
-        push('dn-suplanta-propio', 'Se hace pasar por tu propio dominio (' + miDominio +
-          ') pero escribe desde ' + fromOrg);
+        push('dn-suplanta-propio', 'Suplanta tu propio dominio (' + miDominio +
+          ') pero envía desde ' + fromOrg);
       }
       if (dominioBasura(from[0].domain)) {
-        push('from-basura', 'El dominio del remitente parece generado a máquina: ' + from[0].domain);
+        push('from-basura', 'El dominio del remitente parece generado automáticamente: ' + from[0].domain);
       }
       if (dn && FREEMAIL.has(fromOrg) && (brand || OFICIAL.test(dn))) {
-        push('dn-oficial-freemail', 'Firma como un departamento o una marca ("' + dn.slice(0, 40) +
-          '") pero escribe desde un buzón gratuito: ' + fromOrg);
+        push('dn-oficial-freemail', 'Firma como departamento o marca ("' + dn.slice(0, 40) +
+          '") pero envía desde un buzón gratuito: ' + fromOrg);
       }
       const mezcla = scriptMixto(dn) || scriptMixto(from[0].address || '');
       if (mezcla) {
-        push('dn-mixed-script', 'Mezcla de alfabetos dentro de una misma palabra ("' + mezcla + '"): letras de otro alfabeto que se ven igual que las latinas');
+        push('dn-mixed-script', 'Mezcla de alfabetos en una misma palabra ("' + mezcla + '"): caracteres visualmente idénticos a los latinos');
       }
       if (/(^|\.)xn--/i.test(from[0].domain || '')) push('from-punycode', 'Dominio del remitente en punycode: ' + from[0].domain);
       if (RISKY_TLD.has((from[0].domain || '').split('.').pop())) {
         push('from-tld', 'TLD de alto abuso en el remitente: .' + from[0].domain.split('.').pop());
       }
       if (FREEMAIL.has(fromOrg) && CARGOS.test(dn)) {
-        push('from-freemail-cargo', 'Se presenta como "' + dn.trim() + '" pero escribe desde una cuenta de correo gratuita');
+        push('from-freemail-cargo', 'Se presenta como "' + dn.trim() + '" pero envía desde una cuenta de correo gratuita');
       }
       if (from.length > 1) {
         const conDireccion = from.filter(a => a.address && a.address.indexOf('@') > 0);
@@ -972,7 +976,7 @@
           push('from-multi', 'Múltiples direcciones en From (' + conDireccion.length + '): técnica de evasión');
         } else {
           push('from-malformed', 'El From lleva una coma sin comillas ("' + (from[0].raw || '').slice(0, 40) +
-            '"): parte la cabecera en dos y tu programa de correo enseña una cosa distinta de la que lee el filtro');
+            '"): divide la cabecera, y el cliente de correo muestra un remitente distinto del que evalúa el filtro');
         }
       }
       const parecido = dominioParecido(fromOrg);
@@ -987,7 +991,7 @@
       push('xmailer', 'X-Mailer sospechoso: ' + xMailer.trim());
     }
 
-    // --- Por donde ha pasado -------------------------------------------------
+    // --- 3. Transporte: por dónde ha pasado -----------------------------------
     if (hops.length === 0) { if (!noTransport) push('rcv-none', 'Sin cabeceras Received: mensaje inyectado localmente o cabeceras eliminadas'); }
     if (!dateHdr && !noTransport) push('date-missing', 'Sin cabecera Date');
     if (dateHdr && hops.length) {
@@ -997,23 +1001,21 @@
         push('date-skew', 'Date difiere más de 48 h del primer Received: cabecera falsificada');
       }
     }
-    const originIP = (() => {
-      for (const h of hops) { if (h.publicIPs.length) return h.publicIPs[0]; }
-      return null;
-    })();
+    const primerSalto = hops.find(h => h.publicIPs.length);
+    const originIP = primerSalto ? primerSalto.publicIPs[0] : null;
 
-    // --- 4. ¿Que te pide? ---------------------------------------------------
+    // --- 4. Contenido: qué solicita el mensaje --------------------------------
     if (URGENCY.test(subject)) push('subj-urgency', 'Asunto con lenguaje de urgencia/presión');
     if (html) {
       if (/type\s*=\s*["']?password/i.test(html)) push('body-password', 'Campo de contraseña en el HTML del correo');
-      if (/http-equiv\s*=\s*["']?refresh/i.test(html)) push('body-refresh', 'meta refresh: redirección automatica');
+      if (/http-equiv\s*=\s*["']?refresh/i.test(html)) push('body-refresh', 'meta refresh: redirección automática');
       const invisible = html.match(/(font-size\s*:\s*0|display\s*:\s*none|visibility\s*:\s*hidden|color\s*:\s*#?f{3,6}\b)/gi);
       if (invisible && invisible.length >= 2 && !autentica) push('body-hidden', 'Texto oculto/invisible (' + invisible.length + ' ocurrencias): evasión de filtros');
       const textLen = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().length;
       const imgs = (html.match(/<img\b/gi) || []).length;
       if (imgs > 0 && textLen < 120) push('body-image', 'Correo casi solo imagen (' + imgs + ' img, ' + textLen + ' chars): evasión de análisis textual');
     }
-    if (!html && !plain && attachments.length) push('body-empty', 'Cuerpo vacio con adjunto: patron de malware/spear-phishing');
+    if (!html && !plain && attachments.length) push('body-empty', 'Cuerpo vacío con adjunto: patrón de malware o spear-phishing');
     if (/(bitcoin|btc|usdt|ethereum|monero|wallet|seed phrase|frase semilla|criptomoneda)/i.test(textoVisible + ' ' + subject)) {
       push('body-crypto', 'Referencias a criptomonedas (extorsión o fraude de inversión)');
     }
@@ -1022,37 +1024,37 @@
       push('body-bec', 'Patrón BEC: pide un pago o un cambio de datos bancarios y el remitente no es de fiar');
     }
     if (IBAN_RE.test(textoVisible) && pinta_bec) {
-      push('body-iban', 'Da un número de cuenta (IBAN) dentro del correo para que hagas el ingreso ahí');
+      push('body-iban', 'Incluye un IBAN en el cuerpo del mensaje para recibir el ingreso');
     }
     if (urls.filter(u => u.tipo === 'enlace').length === 0 && TELEFONO.test(textoVisible) &&
         LLAMADA.test(textoVisible) && COBRO.test(textoVisible + ' ' + subject)) {
-      push('body-callback', 'Te da un teléfono para cancelar un cobro que no has hecho, y ningún enlace: la estafa consiste en que llames');
+      push('body-callback', 'Facilita un teléfono para cancelar un cobro inexistente y no incluye enlaces: el fraude se consuma en la llamada');
     }
     if (/(no me llames|no llames|no puedo hablar|estoy en una reunion|estoy en una reunión|no digas nada|es confidencial)/i.test(textoVisible)) {
-      push('body-nocontacto', 'Pide que no le llames ni lo comentes: sirve para que nadie verifique la petición');
+      push('body-nocontacto', 'Solicita no llamar ni comentarlo con nadie: impide verificar la petición');
     }
     if (PREMIO.test(subject)) {
-      push('subj-premio', 'El asunto anuncia un premio, un sorteo o un bono que no has pedido');
+      push('subj-premio', 'El asunto anuncia un premio, un sorteo o un bono no solicitado');
     }
     if (BUZON.test(subject) || BUZON.test(textoVisible.slice(0, 2500))) {
-      push('body-buzon', 'Dice que tu buzón se llena, que tu contraseña caduca o que tienes correo retenido: es la excusa más usada para que metas la contraseña');
+      push('body-buzon', 'Alega buzón lleno, contraseña caducada o correo retenido: el pretexto más habitual para solicitar credenciales');
     }
     for (const u of urls) {
       if (u.tipo === 'enlace' && HOSTING_GRATIS.test(u.host || '')) {
-        push('url-hosting-gratis', 'El enlace lleva a una página alojada gratis (' + defang(u.host) +
-          '), no a la web de la empresa que dice ser');
+        push('url-hosting-gratis', 'El enlace apunta a una página en alojamiento gratuito (' + defang(u.host) +
+          '), no al sitio de la empresa que dice representar');
         break;
       }
     }
     if (urls.filter(u => u.tipo === 'enlace').length === 0 && attachments.length && textoVisible.length < 400) {
-      push('att-senuelo', 'Cuatro líneas y un adjunto, sin un solo enlace: todo el mensaje está en el fichero para que lo abras');
+      push('att-senuelo', 'Mensaje muy breve con adjunto y sin enlaces: el contenido está en el fichero para inducir a abrirlo');
     }
     const truncado = (function hay(n) { return !!n.truncado || n.children.some(hay); })(root);
     if (truncado) {
-      push('mime-profundo', 'El mensaje anida partes tan hondo que he dejado de abrirlas: puede haber algo escondido ahí debajo');
+      push('mime-profundo', 'Anidamiento MIME excesivo: el análisis se detiene antes del final y puede quedar contenido sin revisar');
     }
 
-    // --- 3 y 5. ¿A donde te lleva? ¿Que trae? --------------------------------
+    // --- 5. Enlaces y adjuntos ------------------------------------------------
     const seenUrlFlags = new Set();
     for (const u of urls) {
       for (const f of u.flags) {
@@ -1080,35 +1082,19 @@
     });
     const brutoCombos = findings.filter(f => f.cat === 'combinacion').reduce((s, f) => s + f.points, 0);
     if (brutoCombos) {
-      desglose.push({ cat: 'combinacion', nombre: 'Combinaciones que encajan con un fraude conocido',
+      desglose.push({ cat: 'combinacion', nombre: 'Combinaciones compatibles con fraudes conocidos',
         bruto: brutoCombos, techo: TECHO_COMBOS, puntos: Math.min(brutoCombos, TECHO_COMBOS),
         reglas: findings.filter(f => f.cat === 'combinacion').length });
     }
     const score = Math.max(0, Math.min(100, desglose.reduce((s, d) => s + d.puntos, 0)));
     const verdict = UMBRALES.find(([min]) => score >= min)[1];
 
-    const iocDomains = new Set();
-    const iocUrls = new Set();
-    const iocIPs = new Set();
-    const iocHashes = new Set();
-    const iocEmails = new Set();
-    for (const u of urls) { iocUrls.add(u.url); if (u.host && !isIP(u.host)) iocDomains.add(u.host); else if (u.host) iocIPs.add(u.host); }
-    for (const h of hops) for (const ip of h.publicIPs) iocIPs.add(ip);
-    for (const a of attachments) { if (a.sha256) iocHashes.add(a.sha256); else if (a.md5) iocHashes.add(a.md5); }
-    for (const g of [from, replyTo, returnPath, sender]) for (const a of g) if (a.address) iocEmails.add(a.address);
-
-    const iocs = {
-      urls: Array.from(iocUrls), urlsDefanged: Array.from(iocUrls).map(defang),
-      domains: Array.from(iocDomains), domainsDefanged: Array.from(iocDomains).map(defang),
-      ips: Array.from(iocIPs), hashes: Array.from(iocHashes), emails: Array.from(iocEmails)
-    };
-
-    const interesting = ['from', 'reply-to', 'return-path', 'to', 'cc', 'bcc', 'subject', 'date',
-      'message-id', 'in-reply-to', 'references', 'x-mailer', 'user-agent', 'x-originating-ip',
-      'authentication-results', 'received-spf', 'dkim-signature', 'arc-authentication-results',
-      'x-forefront-antispam-report', 'x-microsoft-antispam', 'x-spam-status', 'x-spam-score',
-      'list-unsubscribe', 'content-type', 'mime-version', 'x-priority', 'importance', 'sender',
-      'x-sender', 'x-original-from', 'x-authenticated-sender', 'x-php-originating-script'];
+    const ioc = { urls: new Set(), domains: new Set(), ips: new Set(), hashes: new Set(), emails: new Set() };
+    for (const u of urls) { ioc.urls.add(u.url); if (u.host) (isIP(u.host) ? ioc.ips : ioc.domains).add(u.host); }
+    for (const h of hops) for (const ip of h.publicIPs) ioc.ips.add(ip);
+    for (const a of attachments) if (a.sha256 || a.md5) ioc.hashes.add(a.sha256 || a.md5);
+    for (const g of [from, replyTo, returnPath, sender]) for (const a of g) if (a.address) ioc.emails.add(a.address);
+    const iocs = Object.fromEntries(Object.entries(ioc).map(([k, v]) => [k, Array.from(v)]));
 
     return {
       meta: {
@@ -1134,7 +1120,7 @@
         spfDomain: auth.spfDomain, dkimDomain: auth.dkimDomain, dmarcFrom: auth.dmarcFrom,
         alignment, dkimSignatures: auth.dkimSignatures, arcSeals: auth.arcChain, raw: auth.raw
       },
-      headers: H.map(([k, v]) => ({ name: k, value: v, decoded: decodeRFC2047(v), interesting: interesting.indexOf(k.toLowerCase()) >= 0 })),
+      headers: H.map(([k, v]) => ({ name: k, value: v, decoded: decodeRFC2047(v), interesting: CABECERAS_UTILES.has(k.toLowerCase()) })),
       received: hops,
       urls, attachments, findings, iocs,
       bodies: { plain: plain.slice(0, 200000), htmlLength: html.length, htmlSource: html.slice(0, 400000) },
@@ -1142,7 +1128,7 @@
     };
   }
 
-  function describeStructure(node, prefix) {
+  function describeStructure(node) {
     const label = node.mime + (node.params.charset ? '; charset=' + node.params.charset : '') +
       (node.encoding && node.encoding !== '7bit' ? ' [' + node.encoding + ']' : '') +
       ((node.dispParams && node.dispParams.filename) ? ' -> ' + decodeRFC2047(node.dispParams.filename) : '');
